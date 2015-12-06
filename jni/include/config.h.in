@@ -1,0 +1,23 @@
+#cmakedefine HAVE_UNISTD_H
+#cmakedefine HAVE_STRING_H
+#cmakedefine HAVE_STDLIB_H
+#cmakedefine HAVE_MALLOC_H
+#cmakedefine HAVE_GETOPT_H
+#cmakedefine HAVE_SYS_SOCKET_H
+#cmakedefine HAVE_SYS_TIME_H
+#cmakedefine HAVE_NETINET_IN_H
+#cmakedefine HAVE_NETINET_IP_H
+#cmakedefine HAVE_NETINET_IP_ICMP_H
+#cmakedefine HAVE_NETDB_H
+#cmakedefine HAVE_ERRNO_H
+
+/* the checksum entry in the ICMP struct */
+#define ICMP_CHECKSUM icmp_cksum
+
+/* the type entry in the ICMP struct */
+#define ICMP_TYPE icmp_type
+
+/* the ihl entry in the IP struct */
+#define ONMS_IP_HL ip_hl
+
+#define onms_socklen_t socklen_t
