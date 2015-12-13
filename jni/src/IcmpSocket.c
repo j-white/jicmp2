@@ -1,85 +1,39 @@
-/*
-This file is part of the OpenNMS(R) Application.
-
-OpenNMS(R) is Copyright (C) 2002-2007 The OpenNMS Group, Inc.  All rights reserved.
-OpenNMS(R) is a derivative work, containing both original code, included code and modified
-code that was published under the GNU General Public License. Copyrights for modified
-and included code are below.
-
-OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
-
-Modifications:
-
-2008 Dec 10: More win32 cleanup, should be windows-HANDLE and 64-bit safe
-2008 Feb 05: Cleaned up win32 building, also merged patch from Alfred Reibenschuh <alfred.reibenschuh@it-austria.com>
-2007 Jul 25: Updated to be in a separate library; split out IcmpSocket.h, autoconfized tests
-2004 Oct 27: Handle Darwin 10.2 gracefully.
-2003 Sep 07: More Darwin tweaks.
-2003 Apr 26: Fixes byteswap issues on Solaris x86.
-2003 Mar 25: Used unt64_t instead of unsigned long long.
-2003 Feb 15: Bugfixes for Darwin.
-2003 Feb 11: Bugfixes for Darwin.
-2003 Feb 10: Bugfixes for Darwin.
-2003 Feb 09: ICMP response time on Darwin.
-2003 Feb 02: Initial Darwin port.
-2002 Nov 26: Fixed build issues on Solaris.
-2002 Nov 13: Added response times for ICMP.
-
-Original code base Copyright (C) 1999-2001 Oculan Corp.  All rights reserved.
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-
-For more information contact:
-OpenNMS Licensing       <license@opennms.org>
-http://www.opennms.org/
-http://www.opennms.com/
-
-
-Tab Size = 8
-
-*/
-
+/*******************************************************************************
+ * This file is part of OpenNMS(R).
+ *
+ * Copyright (C) 2010-2015 The OpenNMS Group, Inc.
+ * OpenNMS(R) is Copyright (C) 1999-2015 The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is Copyright (C) 2002-2015 The OpenNMS Group, Inc.  All rights
+ * reserved.  OpenNMS(R) is a derivative work, containing both original code,
+ * included code and modified code that was published under the GNU General
+ * Public License.  Copyrights for modified and included code are below.
+ *
+ * OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License with the Classpath
+ * Exception; either version 2 of the License, or (at your option) any later
+ * version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ * For more information contact:
+ *     OpenNMS(R) Licensing <license@opennms.org>
+ *     http://www.opennms.org/
+ *     http://www.opennms.com/
+ *******************************************************************************/
 #include <config.h>
 
 #include "IcmpSocket.h"
 #include <jni.h>
-
-#ifdef IP_MAXPACKET
-#define MAX_PACKET IP_MAXPACKET
-#else
-#define MAX_PACKET 65535
-#endif
-
-#ifdef __WIN32__
-#define WIN32_LEAN_AND_MEAN
-#undef errno
-#define errno WSAGetLastError()
-
-int gettimeofday (struct timeval *tv, void* tz)
-{
-	union {
-		ULONG64 ns100; /*time since 1 Jan 1601 in 100ns units */
-		FILETIME ft;
-	} now;
-
-	GetSystemTimeAsFileTime (&now.ft);
-	tv->tv_usec = (long) ((now.ns100 / 10LL) % 1000000LL);
-	tv->tv_sec = (long) ((now.ns100 - 116444736000000000LL) / 10000000LL);
-	return (0);
-}
-#endif
 
 #if 0
 #pragma export on
@@ -96,40 +50,31 @@ int gettimeofday (struct timeval *tv, void* tz)
 * zero if the buffer is not aligned on a 16-bit
 * boundry.
 *
+* FIXME: Add unit tests for this one.
 */
-static
-unsigned short checksum(register unsigned short *p, register int sz)
-{
+static unsigned short checksum(register unsigned short *p, register int sz) {
 	register unsigned long sum = 0;	// need a 32-bit quantity
 
-	/*
-	* iterate over the 16-bit values and
-	* accumulate a sum.
-	*/
-	while(sz > 1)
-	{
+	// iterate over the 16-bit values and accumulate a sum.
+	while (sz > 1) {
 		sum += *p++;
 		sz  -= 2;
 	}
 
-	if(sz == 1) /* handle the odd byte out */
-	{
-		/*
-		* cast the pointer to an unsigned char pointer,
-		* dereference and promote to an unsigned short.
-		* Shift in 8 zero bits and voila the value
-		* is padded!
-		*/
+	// handle the odd byte out
+	if (sz == 1) {
+		// cast the pointer to an unsigned char pointer,
+		// dereference and promote to an unsigned short.
+		// Shift in 8 zero bits and voila the value is padded!
 		sum += ((unsigned short) *((unsigned char *)p)) << 8;
 	}
 
-	/*
-	* Add back the bits that may have overflowed the
-	* "16-bit" sum. First add high order 16 to low
-	* order 16, then repeat
-	*/
-	while(sum >> 16)
+	// Add back the bits that may have overflowed the
+	// "16-bit" sum. First add high order 16 to low
+	// order 16, then repeat
+	while (sum >> 16) {
 		sum = (sum >> 16) + (sum & 0xffffUL);
+	}
 
 	sum = ~sum & 0xffffUL;
 	return (unsigned short)sum;
@@ -137,28 +82,24 @@ unsigned short checksum(register unsigned short *p, register int sz)
 
 /**
  * Returns the socket family, i.e. AF_INET (IPv4) or AF_INET6 (IPv6)
- * to use for this IcmpSocket instance.
+ * to use for this ICMPSocket instance.
  */
 static int getSocketFamily(JNIEnv *env, jobject instance) {
     jclass  thisClass = NULL;
-
     jfieldID thisIdField = NULL;
-
     int socketFamily = AF_INET;
 
     // Find the class that describes ourself.
     thisClass = (*env)->GetObjectClass(env, instance);
-    if(thisClass == NULL)
-        goto end_getid;
+    if(thisClass == NULL) {
+		goto end_getfamily;
+	}
 
     // Grab a reference to the field that stores the id
     thisIdField = (*env)->GetFieldID(env, thisClass, "m_useIPv6", "Z");
-    if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
-        goto end_getid;
-
-    // We're done with the reference to the class
-    (*env)->DeleteLocalRef(env, thisClass);
-    thisClass = NULL;
+    if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getfamily;
+	}
 
     // Grab the value
     jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, thisIdField);
@@ -166,40 +107,45 @@ static int getSocketFamily(JNIEnv *env, jobject instance) {
         socketFamily = AF_INET6;
     }
 
-end_getid:
+end_getfamily:
+	// Cleanup
+	if (thisClass != NULL) {
+		(*env)->DeleteLocalRef(env, thisClass);
+	}
+
     return socketFamily;
 }
 
 /**
-* This method is used to retrieve the value of the pinger ID
-* from the IcmpSocket instance.
+* Returns the unique pinger id of this ICMPSocket instance.
+* FIXME: Consolidate to return a struct with all of the instance specific details
 */
-static int getPingerId(JNIEnv *env, jobject instance)
-{
+static int getPingerId(JNIEnv *env, jobject instance) {
     jclass  thisClass = NULL;
-
     jfieldID thisIdField = NULL;
-
 	int pingerId = 0;
 
     // Find the class that describes ourself.
 	thisClass = (*env)->GetObjectClass(env, instance);
-	if(thisClass == NULL)
+	if(thisClass == NULL) {
 		goto end_getid;
+	}
 
 	// Grab a reference to the field that stores the id
 	thisIdField = (*env)->GetFieldID(env, thisClass, "m_pingerId", "I");
-	if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getid;
-
-	// We're done with the reference to the class
-	(*env)->DeleteLocalRef(env, thisClass);
-	thisClass = NULL;
+	}
 
 	// Grab the value
 	pingerId = (*env)->GetIntField(env, instance, thisIdField);
 
 end_getid:
+	// Cleanup
+	if (thisClass != NULL) {
+		(*env)->DeleteLocalRef(env, thisClass);
+	}
+
 	return pingerId;
 }
 
@@ -210,11 +156,11 @@ end_getid:
 * allocated by the operating system.
 *
 * If the descriptor could not be recovered or has not been
-* set then a negative value is returned.
+* set then a INVALID_SOCKET is returned.
 *
+* FIXME: Consolidate to return a struct with all of the instance specific details
 */
-static onms_socket getIcmpFd(JNIEnv *env, jobject instance)
-{
+static onms_socket getIcmpFd(JNIEnv *env, jobject instance) {
 	jclass	thisClass = NULL;
 	jclass	fdClass   = NULL;
 
@@ -224,42 +170,32 @@ static onms_socket getIcmpFd(JNIEnv *env, jobject instance)
 	jfieldID fdFdField = NULL;
 	onms_socket	fd_value  = INVALID_SOCKET;
 
-	/**
-	* Find the class that describes ourself.
-	*/
+	// Find the class that describes ourself.
 	thisClass = (*env)->GetObjectClass(env, instance);
-	if(thisClass == NULL)
+	if (thisClass == NULL) {
 		goto end_getfd;
+	}
 
-	/**
-	* Find the java.io.FileDescriptor class
-	*/
+	// Find the java.io.FileDescriptor class
 	thisFdField = (*env)->GetFieldID(env, thisClass, "m_rawFd", "Ljava/io/FileDescriptor;");
-	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getfd;
+	}
 
-	(*env)->DeleteLocalRef(env, thisClass);
-	thisClass = NULL;
-
-	/**
-	* Get the instance of the FileDescriptor class from
-	* the instance of ourself
-	*/
+	// Get the instance of the FileDescriptor class from the instance of ourself
 	thisFdInstance = (*env)->GetObjectField(env, instance, thisFdField);
-	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getfd;
+	}
 
-	/**
-	* Get the class object for the java.io.FileDescriptor
-	*/
+	// Get the class object for the java.io.FileDescriptor
 	fdClass = (*env)->GetObjectClass(env, thisFdInstance);
-	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getfd;
+	}
 
-	/**
-	* Get the field identifier for the primitive integer
-	* that is part of the FileDescriptor class.
-	*/
+	// Get the field identifier for the primitive integer
+	// that is part of the FileDescriptor class.
 #ifdef __WIN32__
 	fdFdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
 #else
@@ -269,30 +205,28 @@ static onms_socket getIcmpFd(JNIEnv *env, jobject instance)
 		goto end_getfd;
 	}
 
-	(*env)->DeleteLocalRef(env, fdClass);
-	fdClass = NULL;
-
-	/**
-	* Recover the value
-	*/
+	// Recover the value
 #ifdef __WIN32__
 	fd_value = (SOCKET)(*env)->GetLongField(env, thisFdInstance, fdFdField);
 #else
 	fd_value = (*env)->GetIntField(env, thisFdInstance, fdFdField);
 #endif
 
-	(*env)->DeleteLocalRef(env, thisFdInstance);
-
 end_getfd:
-	/**
-	* method complete, value is INVALID_SOCKET unless the
-	* entire method is successful.
-	*/
+	if (thisClass != NULL) {
+		(*env)->DeleteLocalRef(env, thisClass);
+	}
+	if (fdClass != NULL) {
+		(*env)->DeleteLocalRef(env, fdClass);
+	}
+	if (thisFdInstance != NULL) {
+		(*env)->DeleteLocalRef(env, thisFdInstance);
+	}
+
 	return fd_value;
 }
 
-static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value)
-{
+static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value) {
 	jclass	thisClass = NULL;
 	jclass	fdClass   = NULL;
 
@@ -301,56 +235,41 @@ static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value)
 
 	jfieldID fdFdField = NULL;
 
-	/**
-	* Find the class that describes ourself.
-	*/
+	// Find the class that describes ourself.
 	thisClass = (*env)->GetObjectClass(env, instance);
-	if(thisClass == NULL)
+	if(thisClass == NULL) {
 		goto end_setfd;
+	}
 
-	/**
-	* Find the java.io.FileDescriptor class
-	*/
+	// Find the java.io.FileDescriptor class
 	thisFdField = (*env)->GetFieldID(env, thisClass, "m_rawFd", "Ljava/io/FileDescriptor;");
-	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
+	}
 
-	(*env)->DeleteLocalRef(env, thisClass);
-	thisClass = NULL;
-
-	/**
-	* Get the instance of the FileDescriptor class from
-	* the instance of ourself
-	*/
+	// Get the instance of the FileDescriptor class from the instance of ourself
 	thisFdInstance = (*env)->GetObjectField(env, instance, thisFdField);
-	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
+	}
 
-	/**
-	* Get the class object for the java.io.FileDescriptor
-	*/
+	// Get the class object for the java.io.FileDescriptor
 	fdClass = (*env)->GetObjectClass(env, thisFdInstance);
-	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
+	}
 
-	/**
-	* Get the field identifier for the primitive integer
-	* that is part of the FileDescriptor class.
-	*/
+	// Get the field identifier for the primitive integer
+	// that is part of the FileDescriptor class.
 #ifdef __WIN32__
 	fdFdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
 #else
 	fdFdField = (*env)->GetFieldID(env, fdClass, "fd", "I");
 #endif
-	if(fdFdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(fdFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
+	}
 
-	(*env)->DeleteLocalRef(env, fdClass);
-	fdClass = NULL;
-
-	/**
-	* Set the value
-	*/
 #ifdef __WIN32__
 	(*env)->SetLongField(env, thisFdInstance, fdFdField, fd_value);
 #else
@@ -359,16 +278,16 @@ static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value)
 	(*env)->DeleteLocalRef(env, thisFdInstance);
 
 end_setfd:
-	/**
-	* method complete, value is INVALID_SOCKET unless the
-	* entire method is successful.
-	*/
-	return;
+	if (thisClass != NULL) {
+		(*env)->DeleteLocalRef(env, thisClass);
+	}
+	if (fdClass != NULL) {
+		(*env)->DeleteLocalRef(env, fdClass);
+	}
 }
 
-static jobject newInetAddress(JNIEnv *env, in_addr_t addr)
-{
-	char 		buf[32];
+static jobject newInetAddress(JNIEnv *env, in_addr_t addr) {
+	char 		buf[16];
 	jclass		addrClass;
 	jmethodID	addrByNameMethodID;
 	jobject 	addrInstance = NULL;
@@ -381,204 +300,193 @@ static jobject newInetAddress(JNIEnv *env, in_addr_t addr)
 		((unsigned char *) &addr)[2],
 		((unsigned char *) &addr)[3]);
 
-	/**
-	* create the string
-	*/
+	// Create the string
 	addrString = (*env)->NewStringUTF(env, (const char *)buf);
-	if(addrString == NULL || (*env)->ExceptionOccurred(env))
+	if(addrString == NULL || (*env)->ExceptionOccurred(env)) {
 		goto end_inet;
+	}
 
-	/**
-	* load the class
-	*/
+	// Load the class
 	addrClass = (*env)->FindClass(env, "java/net/InetAddress");
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/**
-	* Find the static method
-	*/
+	// Find the static method
+	// FIXME: We should use getByAddress insetad of getByName. See newInetAddressV6.
 	addrByNameMethodID = (*env)->GetStaticMethodID(env,
 		addrClass,
 		"getByName",
 		"(Ljava/lang/String;)Ljava/net/InetAddress;");
-	if(addrByNameMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrByNameMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/*
-	* Invoke it!
-	*/
+	// Invoke it!
 	addrInstance = (*env)->CallStaticObjectMethod(env,
 		addrClass,
 		addrByNameMethodID,
 		addrString);
 
-	(*env)->DeleteLocalRef(env, addrClass);
-	(*env)->DeleteLocalRef(env, addrString);
 end_inet:
+	if (addrClass != NULL) {
+		(*env)->DeleteLocalRef(env, addrClass);
+	}
+	if (addrString != NULL) {
+		(*env)->DeleteLocalRef(env, addrString);
+	}
 
 	return addrInstance;
 }
 
 
-static jobject newInetAddressV6(JNIEnv *env, unsigned char addr[])
-{
-	jclass		addrClass;
-	jmethodID	addrByAddressMethodID;
-	jobject 	addrInstance = NULL;
-	jbyteArray      addrArray = NULL;
+static jobject newInetAddressV6(JNIEnv *env, unsigned char addr[]) {
+	jclass addrClass;
+	jmethodID addrByAddressMethodID;
+	jobject addrInstance = NULL;
+	jbyteArray addrArray = NULL;
 
-	/**
-	 * copy the address into a jbyteArray
-         */
+	// Copy the address into a jbyteArray
 	addrArray = (*env)->NewByteArray(env, 16);
-	if(addrArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
-	{
+	if(addrArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 		(*env)->SetByteArrayRegion(env,
 								   addrArray,
 								   0,
 								   (jsize)16,
 								   (jbyte *)addr);
 	}
-	if ((*env)->ExceptionOccurred(env) != NULL)
+	if ((*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/**
-	* load the class
-	*/
+	// Load the class
 	addrClass = (*env)->FindClass(env, "java/net/InetAddress");
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/**
-	* Find the static method
-	*/
+	// Find the static method
 	addrByAddressMethodID = (*env)->GetStaticMethodID(env,
 													  addrClass,
 													  "getByAddress",
 													  "([B)Ljava/net/InetAddress;");
-	if(addrByAddressMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrByAddressMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/*
-	* Invoke it!
-	*/
+	// Invoke it!
 	addrInstance = (*env)->CallStaticObjectMethod(env,
 												  addrClass,
 												  addrByAddressMethodID,
 												  addrArray);
-
-	(*env)->DeleteLocalRef(env, addrClass);
-	(*env)->DeleteLocalRef(env, addrArray);
-	end_inet:
-
+end_inet:
+	if(addrClass != NULL) {
+		(*env)->DeleteLocalRef(env, addrClass);
+	}
+	if(addrArray != NULL) {
+		(*env)->DeleteLocalRef(env, addrArray);
+	}
 	return addrInstance;
 }
 
 
-static in_addr_t getInetAddress(JNIEnv *env, jobject instance)
-{
+static in_addr_t getInetAddress(JNIEnv *env, jobject instance) {
 	jclass		addrClass = NULL;
 	jmethodID	addrArrayMethodID = NULL;
 	jbyteArray	addrData = NULL;
-
 	in_addr_t	retAddr = 0;
 
-	/**
-	* load the class
-	*/
+	// Load the class
 	addrClass = (*env)->GetObjectClass(env, instance);
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/**
-	* Find the method
-	*/
+	// Find the method
 	addrArrayMethodID = (*env)->GetMethodID(env,
 		addrClass,
 		"getAddress",
 		"()[B");
-	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
 	addrData = (*env)->CallObjectMethod(env,instance,addrArrayMethodID);
-	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/*
-	* The byte array returned from java.net.InetAddress.getAddress()
-	* (which was fetched above and is stored as a jbyteArray in addrData)
-	* is in network byte order (high byte first, AKA big endian).
-	* the value of in_addr_t is also in network byte order, so no
-	* conversion needs to be performed.
-	*/
+	// The byte array returned from java.net.InetAddress.getAddress()
+	// (which was fetched above and is stored as a jbyteArray in addrData)
+	// is in network byte order (high byte first, AKA big endian).
+	// the value of in_addr_t is also in network byte order, so no
+	// conversion needs to be performed.
 	(*env)->GetByteArrayRegion(env,
 		addrData,
 		0,
 		4,
 		(jbyte *) &retAddr);
 
-	(*env)->DeleteLocalRef(env, addrClass);
-	(*env)->DeleteLocalRef(env, addrData);
 end_inet:
+	if (addrClass != NULL) {
+		(*env)->DeleteLocalRef(env, addrClass);
+	}
+	if (addrData != NULL) {
+		(*env)->DeleteLocalRef(env, addrData);
+	}
 
 	return retAddr;
 }
 
-static void getInet6Address(JNIEnv *env, jobject instance, unsigned char addr[])
-{
+static void getInet6Address(JNIEnv *env, jobject instance, unsigned char addr[]) {
 	jclass		addrClass = NULL;
 	jmethodID	addrArrayMethodID = NULL;
 	jbyteArray	addrData = NULL;
 
-
-	/**
-	* load the class
-	*/
+	// Load the class
 	addrClass = (*env)->GetObjectClass(env, instance);
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/**
-	* Find the method
-	*/
+	// Find the method
 	addrArrayMethodID = (*env)->GetMethodID(env,
 											addrClass,
 											"getAddress",
 											"()[B");
-	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
 	addrData = (*env)->CallObjectMethod(env,instance,addrArrayMethodID);
-	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
+	}
 
-	/*
-	* The byte array returned from java.net.InetAddress.getAddress()
-	* (which was fetched above and is stored as a jbyteArray in addrData)
-	* is in network byte order (high byte first, AKA big endian).
-	* the value of addr is also in network byte order, so no
-	* conversion needs to be performed.
-	*/
+	// The byte array returned from java.net.InetAddress.getAddress()
+	// (which was fetched above and is stored as a jbyteArray in addrData)
+	// is in network byte order (high byte first, AKA big endian).
+	// the value of in_addr_t is also in network byte order, so no
+	// conversion needs to be performed.
 	(*env)->GetByteArrayRegion(env,
 							   addrData,
 							   0,
 							   16,
 							   (jbyte *)addr);
-
-	(*env)->DeleteLocalRef(env, addrClass);
-	(*env)->DeleteLocalRef(env, addrData);
-
-	end_inet:
+end_inet:
+	if (addrClass != NULL) {
+		(*env)->DeleteLocalRef(env, addrClass);
+	}
+	if (addrData != NULL) {
+		(*env)->DeleteLocalRef(env, addrData);
+	}
 	return;
 }
 
 
-static void throwError(JNIEnv *env, char *exception, char *errorBuffer)
-{
+static void throwError(JNIEnv *env, char *exception, char *errorBuffer) {
 	jclass ioException = (*env)->FindClass(env, exception);
-	if (ioException != NULL)
-	{
+	if (ioException != NULL) {
 		(*env)->ThrowNew(env, ioException, errorBuffer);
 	}
 }
@@ -598,8 +506,7 @@ static void throwError(JNIEnv *env, char *exception, char *errorBuffer)
 * Signature: ()V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject instance)
-{
+Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject instance) {
 	struct protoent *proto;
 	onms_socket icmp_fd = INVALID_SOCKET;
 	int sock_type = SOCK_RAW;
@@ -683,23 +590,18 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 	return;
 }
 
-
 /*
 * Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    receive
 * Signature: ()Ljava/net/DatagramPacket;
 */
 JNIEXPORT jobject JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instance)
-{
-
+Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instance) {
 	int			iRC;
 	void *			inBuf = NULL;
 
 	onms_socklen_t		inAddrLen;
 	struct sockaddr*    inAddr;
-
-
 	struct sockaddr_in	inAddrV4;
 
 	iphdr_t *		ip4Hdr = NULL;
@@ -716,41 +618,31 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 
 	int family = getSocketFamily(env, instance);
 
-	/**
-	* Get the current descriptor's value
-	*/
+	// Get the current descriptor's value
 	onms_socket fd_value = getIcmpFd(env, instance);
-	if((*env)->ExceptionOccurred(env) != NULL)
-	{
-		goto end_recv; /* jump to end if necessary */
-	}
-	else if(fd_value < 0)
-	{
+	if((*env)->ExceptionOccurred(env) != NULL) {
+		goto end_recv;
+	} else if(fd_value < 0) {
 		throwError(env, "java/io/IOException", "Invalid Socket Descriptor");
 		goto end_recv;
 	}
 
-	/**
-	* Allocate a buffer to receive data if necessary.
-	* This is probably more than necessary, but we don't
-	* want to lose messages if we don't need to. This also
-	* must be dynamic for MT-Safe reasons and avoids blowing
-	* up the stack.
-	*/
+	// Allocate a buffer to receive data if necessary.
+	// This is probably more than necessary, but we don't
+	// want to lose messages if we don't need to. This also
+	// must be dynamic for MT-Safe reasons and avoids blowing
+	// up the stack.
 	//FIXME: Is this really necessary?
 	inBuf = malloc(MAX_PACKET);
-	if(inBuf == NULL)
-	{
+	if(inBuf == NULL) {
 		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram");
 		goto end_recv;
 	}
 	memset(inBuf, 0, MAX_PACKET);
 
-	/**
-	* Clear out the address structures where the
-	* operating system will store the to/from address
-	* information.
-	*/
+	// Clear out the address structures where the
+	// operating system will store the to/from address
+	// information.
 	if (family == AF_INET) {
 		memset((void *)&inAddrV4, 0, sizeof(inAddrV4));
 		inAddrLen = sizeof(inAddrV4);
@@ -759,80 +651,64 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		memset((void *)&inAddrV6, 0, sizeof(inAddrV6));
 		inAddrLen = sizeof(inAddrV6);
 		inAddr = (struct sockaddr *)&inAddrV6;
+	} else {
+		// TODO: ERR
+		goto end_recv;
 	}
 
-	/**
-	* Receive the data from the operating system. This
-	* will also include the IP header that precedes
-	* the ICMP data, we'll strip that off later.
-	*/
-	iRC = recvfrom(fd_value, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
-	if(iRC == SOCKET_ERROR)
-	{
-		/*
-		* Error reading the information from the socket
-		*/
+	// Receive the data from the operating system. This
+	// will also include the IP header that precedes
+	// the ICMP data, we'll strip that off later.
+	iRC = (int)recvfrom(fd_value, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
+	if(iRC == SOCKET_ERROR) {
+		// Error reading the information from the socket
 		char errBuf[256];
 		int savedErrno = errno;
 		snprintf(errBuf, sizeof(errBuf), "Error reading data from the socket descriptor (iRC = %d, fd_value = %d, %d, %s)", iRC, fd_value, savedErrno, strerror(savedErrno));
 		throwError(env, "java/io/IOException", errBuf);
 		goto end_recv;
-	}
-	else if(iRC == 0)
-	{
-		/*
-		* Error reading the information from the socket
-		*/
+	} else if(iRC == 0) {
+		// Error reading the information from the socket
 		throwError(env, "java/io/EOFException", "End-of-File returned from socket descriptor");
 		goto end_recv;
 	}
 
 	if (family == AF_INET) {
-		/**
-        * update the length by removing the IP
-        * header from the message. Don't forget to decrement
-        * the bytes received by the size of the IP header.
-        *
-        * NOTE: The ip_hl field of the IP header is the number
-        * of 4 byte values in the header. Thus the ip_hl must
-        * be multiplied by 4 (or shifted 2 bits).
-        */
+		// update the length by removing the IP
+		// header from the message. Don't forget to decrement
+		// the bytes received by the size of the IP header.
+		//
+		// NOTE: The ip_hl field of the IP header is the number
+		// of 4 byte values in the header. Thus the ip_hl must
+		// be multiplied by 4 (or shifted 2 bits).
 		ip4Hdr = (iphdr_t *)inBuf;
 		iRC -= ip4Hdr->ONMS_IP_HL << 2;
-		if(iRC <= 0)
-		{
+		if(iRC <= 0) {
 			throwError(env, "java/io/IOException", "Malformed ICMP datagram received");
 			goto end_recv;
 		}
 		icmp4Hdr = (icmphdr_t *)((char *)inBuf + (ip4Hdr->ONMS_IP_HL << 2));
 
-		/**
-        * Check the ICMP header for type equal 0, which is ECHO_REPLY, and
-        * then check the payload for the 'OpenNMS!' marker. If it's one
-        * we sent out then fix the recv time!
-        *
-        * Don't forget to check for a buffer overflow!
-        */
+		// Check the ICMP header for type equal 0, which is ECHO_REPLY, and
+		// then check the payload for the 'OpenNMS!' marker. If it's one
+		//  we sent out then fix the recv time!
+		//
+		// Don't forget to check for a buffer overflow!
 		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && icmp4Hdr->ICMP_TYPE == 0
-		   && memcmp((char *)icmp4Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-		{
+		   && memcmp((char *)icmp4Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			uint64_t now;
 			uint64_t sent;
 			uint64_t diff;
 
-			/**
-            * get the current time in microseconds and then
-            * compute the difference
-            */
+			// Get the current time in microseconds and then
+			// compute the difference
 			CURRENTTIMEMICROS(now);
 			memcpy((char *)&sent, (char *)icmp4Hdr + SENTTIME_OFFSET, TIME_LENGTH);
 			sent = ntohll(sent);
 			diff = now - sent;
 
-			/*
-            * Now fill in the sent, received, and diff
-            */
+			// Now fill in the sent, received, and diff
 			sent = MICROS_TO_MILLIS(sent);
 			sent = htonll(sent);
 			memcpy((char *)icmp4Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
@@ -844,65 +720,52 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 			diff = htonll(diff);
 			memcpy((char *)icmp4Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
 
-			/* no need to recompute checksum on this on
-            * since we don't actually check it upon receipt
-            */
+			// No need to recompute checksum on this on
+			// since we don't actually check it upon receipt
 		}
 
-		/**
-        * Now construct a new java.net.InetAddress object from
-        * the recipt information. The network address must
-        * be passed in network byte order!
-        */
+		// Now construct a new java.net.InetAddress object from
+		// the receipt information. The network address must
+		// be passed in network byte order!
 		addrInstance = newInetAddress(env, inAddrV4.sin_addr.s_addr);
-		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
+		}
 
-		/**
-        * Get the byte array needed to setup
-        * the datagram constructor.
-        */
+		// Get the byte array needed to setup the datagram constructor.
 		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
-		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
-		{
+		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 			(*env)->SetByteArrayRegion(env,
 									   byteArray,
 									   0,
 									   (jsize)iRC,
 									   (jbyte *)icmp4Hdr);
 		}
-		if((*env)->ExceptionOccurred(env) != NULL)
+		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
+		}
 	} else if (family == AF_INET6) {
 		icmp6Hdr = (struct icmp6_hdr *)((char *)inBuf);
 
-		/**
-        * Check the ICMP header for type ECHO_REPLY, and
-        * then check the payload for the 'OpenNMS!' marker. If it's one
-        * we sent out then fix the recv time!
-        *
-        * Don't forget to check for a buffer overflow!
-        */
+		// Check the ICMP header for type ECHO_REPLY, and
+		// then check the payload for the 'OpenNMS!' marker. If it's one
+		// we sent out then fix the recv time!
+		//
+		// Don't forget to check for a buffer overflow!
 		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && icmp6Hdr->icmp6_type == ICMP6_ECHO_REPLY
-		   && memcmp((char *)icmp6Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-		{
+		   && memcmp((char *)icmp6Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			uint64_t now;
 			uint64_t sent;
 			uint64_t diff;
 
-			/**
-            * get the current time in microseconds and then
-            * compute the difference
-            */
+			// Get the current time in microseconds and then compute the difference
 			CURRENTTIMEMICROS(now);
 			memcpy((char *)&sent, (char *)icmp6Hdr + SENTTIME_OFFSET, TIME_LENGTH);
 			sent = ntohll(sent);
 			diff = now - sent;
 
-			/*
-            * Now fill in the sent, received, and diff
-            */
+			// Now fill in the sent, received, and diff
 			sent = MICROS_TO_MILLIS(sent);
 			sent = htonll(sent);
 			memcpy((char *)icmp6Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
@@ -914,57 +777,50 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 			diff = htonll(diff);
 			memcpy((char *)icmp6Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
 
-			/* no need to recompute checksum on this on
-            * since we don't actually check it upon receipt
-            */
+			// No need to recompute checksum on this on
+			// since we don't actually check it upon receipt
 		}
 
-		/**
-        * Now construct a new java.net.InetAddress object from
-        * the recipt information. The network address must
-        * be passed in network byte order!
-        */
+		// Now construct a new java.net.InetAddress object from
+		// the receipt information. The network address must
+		// be passed in network byte order!
 		addrInstance = newInetAddressV6(env, inAddrV6.sin6_addr.s6_addr);
-		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
+		}
 
-		/**
-		* Get the byte array needed to setup
-		* the datagram constructor.
-		*/
+		// Get the byte array needed to setup the datagram constructor.
 		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
-		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
-		{
+		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 			(*env)->SetByteArrayRegion(env,
 									   byteArray,
 									   0,
 									   (jsize)iRC,
 									   (jbyte *)icmp6Hdr);
 		}
-		if((*env)->ExceptionOccurred(env) != NULL)
+		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
+		}
 	}
 
 	/**
 	* get the datagram class
 	*/
 	datagramClass = (*env)->FindClass(env, "java/net/DatagramPacket");
-	if(datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
+	}
 
-	/**
-	* datagram constructor identifier
-	*/
+	// Datagram constructor identifier
 	datagramCtorID = (*env)->GetMethodID(env,
 		datagramClass,
 		"<init>",
 		"([BILjava/net/InetAddress;I)V");
-	if(datagramCtorID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(datagramCtorID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
+	}
 
-	/*
-	* new one!
-	*/
+	// New one!
 	datagramInstance = (*env)->NewObject(env,
 		datagramClass,
 		datagramCtorID,
@@ -973,17 +829,19 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		addrInstance,
 		(jint)0);
 
-	/**
-	* they will be deleted anyway,
-	* but we're just speeding up the process.
-	*/
-	(*env)->DeleteLocalRef(env, addrInstance);
-	(*env)->DeleteLocalRef(env, byteArray);
-	(*env)->DeleteLocalRef(env, datagramClass);
-
 end_recv:
-	if(inBuf != NULL)
+	if (addrInstance != NULL) {
+		(*env)->DeleteLocalRef(env, addrInstance);
+	}
+	if (byteArray != NULL) {
+		(*env)->DeleteLocalRef(env, byteArray);
+	}
+	if (datagramClass != NULL) {
+		(*env)->DeleteLocalRef(env, datagramClass);
+	}
+	if(inBuf != NULL) {
 		free(inBuf);
+	}
 
 	return datagramInstance;
 }
@@ -994,85 +852,75 @@ end_recv:
 * Signature: (Ljava/net/DatagramPacket;)V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet)
-{
-	jclass		dgramClass;
-	jmethodID	dgramGetDataID;
-	jmethodID	dgramGetAddrID;
-	jobject		addrInstance;
-	jbyteArray	icmpDataArray;
+Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet) {
+	jclass dgramClass;
+	jmethodID dgramGetDataID;
+	jmethodID dgramGetAddrID;
+	jobject addrInstance;
+	jbyteArray icmpDataArray;
 
-	char *		outBuffer = NULL;
-	jsize		bufferLen = 0;
-	int		iRC;
+	char * outBuffer = NULL;
+	jsize bufferLen = 0;
+	int iRC;
 
 	struct sockaddr_in AddrV4;
 	struct sockaddr_in6 AddrV6;
 
     int family = getSocketFamily(env, instance);
 
-	/**
-	* Recover the operating system file descriptor
-	* so that we can use it in the sendto function.
-	*/
+	// Recover the operating system file descriptor
+	// so that we can use it in the sendto function.
 	onms_socket icmpfd = getIcmpFd(env, instance);
 
-	/**
-	* Check for exception
-	*/
-	if((*env)->ExceptionOccurred(env) != NULL)
+	// Check for exception
+	if((*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
-	/**
-	* check the descriptor
-	*/
-	if(icmpfd < 0)
-	{
+	// Check the descriptor
+	if(icmpfd < 0) {
 		throwError(env, "java/io/IOException", "Invalid file descriptor");
 		goto end_send;
 	}
 
-	/**
-	* get the DatagramPacket class information
-	*/
+	// Get the DatagramPacket class information
 	dgramClass = (*env)->GetObjectClass(env, packet);
-	if(dgramClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(dgramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
-	/**
-	* Get the identifiers for the getData() and getAddress()
-	* methods that are part of the DatagramPacket class.
-	*/
+	// Get the identifiers for the getData() and getAddress()
+	// methods that are part of the DatagramPacket class.
 	dgramGetDataID = (*env)->GetMethodID(env, dgramClass, "getData", "()[B");
-	if(dgramGetDataID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(dgramGetDataID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
 	dgramGetAddrID = (*env)->GetMethodID(env, dgramClass, "getAddress", "()Ljava/net/InetAddress;");
-	if(dgramGetAddrID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(dgramGetAddrID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
 	(*env)->DeleteLocalRef(env, dgramClass);
 	dgramClass = NULL;
 
-	/**
-	* Get the address information from the DatagramPacket
-	* so that a useable Operating System address can
-	* be constructed.
-	*/
+	// Get the address information from the DatagramPacket
+	// so that a useable Operating System address can
+	// be constructed.
 	addrInstance = (*env)->CallObjectMethod(env, packet, dgramGetAddrID);
-	if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
-	/**
-* Set up the address
-*/
+	// Set up the address
 	if (family == AF_INET) {
 		memset(&AddrV4, 0, sizeof(AddrV4));
 		AddrV4.sin_family = AF_INET;
 		AddrV4.sin_port   = 0;
 		AddrV4.sin_addr.s_addr = getInetAddress(env, addrInstance);
-		if((*env)->ExceptionOccurred(env) != NULL)
+		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
+		}
 	} else if (family == AF_INET6) {
 		memset(&AddrV6, 0, sizeof(AddrV6));
 		AddrV6.sin6_family = AF_INET6;
@@ -1081,41 +929,32 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		getInet6Address(env, addrInstance, AddrV6.sin6_addr.s6_addr);
 	}
 
-	/**
-	* Remove local references that are no longer needed
-	*/
+	// Remove local references that are no longer needed
 	(*env)->DeleteLocalRef(env, addrInstance);
 	addrInstance = NULL;
 
-	/**
-	* Get the byte[] data from the DatagramPacket
-	* and then free up the local reference to the
-	* method id of the getData() method.
-	*/
+	// Get the byte[] data from the DatagramPacket
+	// and then free up the local reference to the
+	// method id of the getData() method.
 	icmpDataArray = (*env)->CallObjectMethod(env, packet, dgramGetDataID);
-	if(icmpDataArray == NULL || (*env)->ExceptionOccurred(env) != NULL)
+	if(icmpDataArray == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
+	}
 
-	/**
-	* Get the length of the buffer so that
-	* a suitable 'char *' buffer can be allocated
-	* and used with the sendto() function.
-	*/
+	// Get the length of the buffer so that
+	// a suitable 'char *' buffer can be allocated
+	// and used with the sendto() function.
 	bufferLen = (*env)->GetArrayLength(env, icmpDataArray);
-	if(bufferLen <= 0)
-	{
+	if(bufferLen <= 0) {
 		throwError(env, "java/io/IOException", "Insufficient data");
 		goto end_send;
 	}
 
-	/**
-	* Allocate the buffer where the java byte[] information
-	* is to be transfered to.
-	*/
+	// Allocate the buffer where the java byte[] information
+	// is to be transfered to.
 	outBuffer = malloc((size_t)bufferLen);
-	if(outBuffer == NULL)
-	{
-		char buf[128]; /* error condition: java.lang.OutOfMemoryError! */
+	if(outBuffer == NULL) {
+		char buf[128]; /// error condition: java.lang.OutOfMemoryError!
 		int serror = errno;
 		snprintf(buf, sizeof(buf), "Insufficent Memory (%d, %s)", serror, strerror(serror));
 
@@ -1123,10 +962,8 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		goto end_send;
 	}
 
-	/**
-	* Copy the contents of the packet's byte[] array
-	* into the newly allocated buffer.
-	*/
+	// Copy the contents of the packet's byte[] array
+	// into the newly allocated buffer.
 	(*env)->GetByteArrayRegion(env,
 		icmpDataArray,
 		0,
@@ -1137,20 +974,15 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 
 	(*env)->DeleteLocalRef(env, icmpDataArray);
 
-	/**
-	* Check for 'OpenNMS!' at byte offset 32. If
-	* it's found then we need to modify the time
-	* and checksum for transmission. ICMP type
-	* must equal 8 for ECHO_REQUEST
-	*
-	* Don't forget to check for a potential buffer
-	* overflow!
-	*/
+	// Check for 'OpenNMS!' at byte offset 32. If
+	// it's found then we need to modify the time
+	// and checksum for transmission. ICMP type
+	// must equal 8 for ECHO_REQUEST
+	// Don't forget to check for a potential buffer overflow!
 	if (family == AF_INET) {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
-		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-		{
+		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			uint64_t now = 0;
 
 			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
@@ -1160,22 +992,21 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 			now = htonll(now);
 			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
 
-			/* recompute the checksum */
+			// Recompute the checksum
 			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
 			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = checksum((unsigned short *)outBuffer, bufferLen);
 		}
 
-		iRC = sendto(icmpfd,
+		iRC = (int)sendto(icmpfd,
 					 (void *)outBuffer,
-					 (int)bufferLen,
+					 (size_t)bufferLen,
 					 0,
 					 (struct sockaddr *)&AddrV4,
 					 sizeof(AddrV4));
 	} else if (family == AF_INET6) {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((struct icmp6_hdr *)outBuffer)->icmp6_type == ICMP6_ECHO_REQUEST
-		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-		{
+		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			uint64_t now = 0;
 
 			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
@@ -1190,33 +1021,27 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 
 		}
 
-		iRC = sendto(icmpfd,
+		iRC = (int)sendto(icmpfd,
 					 (void *)outBuffer,
-					 (int)bufferLen,
+					 (size_t)bufferLen,
 					 0,
 					 (struct sockaddr *)&AddrV6,
 					 sizeof(AddrV6));
 	}
 
-
-	if(iRC == SOCKET_ERROR && errno == EACCES)
-	{
+	if(iRC == SOCKET_ERROR && errno == EACCES) {
 		throwError(env, "java/net/NoRouteToHostException", "cannot send to broadcast address");
-	}
-	else if(iRC != bufferLen)
-	{
+	} else if(iRC != bufferLen) {
 		char buf[128];
 		int serror = errno;
 		snprintf(buf, sizeof(buf), "sendto error (%d, %s)", serror, strerror(serror));
 		throwError(env, "java/io/IOException", buf);
 	}
 
-
 end_send:
-	if(outBuffer != NULL)
+	if(outBuffer != NULL) {
 		free(outBuffer);
-
-	return;
+	}
 }
 
 /*
@@ -1225,16 +1050,14 @@ end_send:
 * Signature: ()V
 */
 JNIEXPORT void
-JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close (JNIEnv *env, jobject instance)
-{
-	onms_socket fd_value = getIcmpFd(env, instance);
-	if(fd_value >= 0 && (*env)->ExceptionOccurred(env) == NULL)
-	{
+JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close
+		(JNIEnv *env, jobject instance) {
+	const onms_socket fd_value = getIcmpFd(env, instance);
+	if(fd_value >= 0 && (*env)->ExceptionOccurred(env) == NULL) {
 		close(fd_value);
 		setIcmpFd(env, instance, INVALID_SOCKET);
-	}
 #ifdef __WIN32__
-	WSACleanup();
+		WSACleanup();
 #endif
-	return;
+	}
 }

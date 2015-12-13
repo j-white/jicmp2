@@ -312,13 +312,24 @@ typedef struct icmphdr icmphdr_t;
  * Winsock uses SOCKET, which is a special kind of Windows
  * HANDLE object, not just an int
  **/
-
 #ifdef __WIN32__
 #define onms_socket SOCKET
 #else
 #define onms_socket int
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
+#endif
+
+#ifdef IP_MAXPACKET
+#define MAX_PACKET IP_MAXPACKET
+#else
+#define MAX_PACKET 65535
+#endif
+
+#ifdef __WIN32__
+#define WIN32_LEAN_AND_MEAN
+#undef errno
+#define errno WSAGetLastError()
 #endif
 
 #endif // _ICMPSOCKET_H
