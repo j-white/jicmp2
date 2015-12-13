@@ -47,6 +47,7 @@ import java.nio.file.Paths;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.opennms.protocols.icmp4.ICMPv4Socket;
 
 public class IcmpSocketTest {
 
@@ -58,7 +59,7 @@ public class IcmpSocketTest {
 
     @Test
     public void canLoadLibrary() throws IOException {
-        try (IcmpSocket socket = new IcmpSocket(1, false)) {
+        try (ICMPv4Socket socket = new ICMPv4Socket(1)) {
         } catch (SocketException e) {
             // Socket initialization can fail with (1, Operation not permitted)
             // this means we were at least able to load the library

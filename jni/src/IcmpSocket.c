@@ -84,7 +84,7 @@ int gettimeofday (struct timeval *tv, void* tz)
 #if 0
 #pragma export on
 #endif
-#include "IcmpSocket_java_interface.h"
+#include "ICMPSocket_java_interface.h"
 #if 0
 #pragma export reset
 #endif
@@ -593,12 +593,12 @@ static void throwError(JNIEnv *env, char *exception, char *errorBuffer)
 * An exception is thrown if either of the
 * getprotobyname() or the socket() calls fail.
 *
-* Class:     org_opennms_protocols_icmp_IcmpSocket
+* Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    initSocket
 * Signature: ()V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_IcmpSocket_initSocket (JNIEnv *env, jobject instance)
+Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject instance)
 {
 	struct protoent *proto;
 	onms_socket icmp_fd = INVALID_SOCKET;
@@ -685,12 +685,12 @@ Java_org_opennms_protocols_icmp_IcmpSocket_initSocket (JNIEnv *env, jobject inst
 
 
 /*
-* Class:     org_opennms_protocols_icmp_IcmpSocket
+* Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    receive
 * Signature: ()Ljava/net/DatagramPacket;
 */
 JNIEXPORT jobject JNICALL
-Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instance)
+Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instance)
 {
 
 	int			iRC;
@@ -989,12 +989,12 @@ end_recv:
 }
 
 /*
-* Class:     org_opennms_protocols_icmp_IcmpSocket
+* Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    send
 * Signature: (Ljava/net/DatagramPacket;)V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_IcmpSocket_send (JNIEnv *env, jobject instance, jobject packet)
+Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet)
 {
 	jclass		dgramClass;
 	jmethodID	dgramGetDataID;
@@ -1220,12 +1220,12 @@ end_send:
 }
 
 /*
-* Class:     org_opennms_protocols_icmp_IcmpSocket
+* Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    close
 * Signature: ()V
 */
 JNIEXPORT void
-JNICALL Java_org_opennms_protocols_icmp_IcmpSocket_close (JNIEnv *env, jobject instance)
+JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close (JNIEnv *env, jobject instance)
 {
 	onms_socket fd_value = getIcmpFd(env, instance);
 	if(fd_value >= 0 && (*env)->ExceptionOccurred(env) == NULL)

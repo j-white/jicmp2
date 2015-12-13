@@ -50,9 +50,12 @@ import java.nio.file.Paths;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.opennms.protocols.icmp4.ICMPv4EchoPacket;
+import org.opennms.protocols.icmp4.ICMPv4Socket;
 import org.opennms.protocols.icmp6.ICMPv6EchoReply;
 import org.opennms.protocols.icmp6.ICMPv6EchoRequest;
 import org.opennms.protocols.icmp6.ICMPv6Packet;
+import org.opennms.protocols.icmp6.ICMPv6Socket;
 
 /**
  *
@@ -75,7 +78,7 @@ public class IcmpSocketITest {
     @Test
     public void canPingLocalhostUsingIPv4Address() throws Exception {
         final InetAddress target = InetAddress.getByName("127.0.0.1");
-        ICMPEchoPacket responsePacket = pingIt(target);
+        ICMPv4EchoPacket responsePacket = pingIt(target);
         System.out.println("IPv4 RTT: " + responsePacket.getPingRTT());
         assertTrue(responsePacket.getPacketSize() > 1);
     }
@@ -88,26 +91,25 @@ public class IcmpSocketITest {
         assertTrue(responsePacket.getPacketLength() > 1);
     }
 
-    private static ICMPEchoPacket pingIt(InetAddress target) throws IOException {
-        try (IcmpSocket socket = new IcmpSocket(1, false)) {
-            ICMPEchoPacket requestPacket = new ICMPEchoPacket(1, 60);
+    private static ICMPv4EchoPacket pingIt(InetAddress target) throws IOException {
+        try (ICMPv4Socket socket = new ICMPv4Socket(1)) {
+            ICMPv4EchoPacket requestPacket = new ICMPv4EchoPacket(1, 60);
             requestPacket.setIdentity((short)1);
             requestPacket.setSequenceId((short)1);
             requestPacket.computeChecksum();
 
-            byte[] requestData = requestPacket.toBytes();
-            socket.send(new DatagramPacket(requestData, requestData.length, target, 0));
+            socket.send(requestPacket.toDatagram(target));
 
             DatagramPacket responseData = socket.receive();
-            return new ICMPEchoPacket(responseData.getData());
+            return new ICMPv4EchoPacket(responseData.getData());
         }
     }
 
     private static ICMPv6EchoReply pingIt6(InetAddress target) throws IOException {
-        try (IcmpSocket socket = new IcmpSocket(1, true)) {
+        try (ICMPv6Socket socket = new ICMPv6Socket(1)) {
             ICMPv6EchoRequest requestPacket = new ICMPv6EchoRequest(1, 1, 1);
-            byte[] requestData = requestPacket.toBytes();
-            socket.send(new DatagramPacket(requestData, requestData.length, target, 0));
+
+            socket.send(requestPacket.toDatagram(target));
 
             DatagramPacket responseData = socket.receive();
             byte[] bytes = responseData.getData();

@@ -36,9 +36,9 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.icmp;
+package org.opennms.protocols.icmp4;
 
-import org.opennms.protocols.ip.OC16ChecksumProducer;
+import org.opennms.protocols.ipv4.OC16ChecksumProducer;
 
 /**
  * This is the implementation of an ICMP Address Mask Reqeust object. The object
@@ -48,7 +48,7 @@ import org.opennms.protocols.ip.OC16ChecksumProducer;
  * @author Brian Weaver
  * 
  */
-public final class AddressMaskRequest extends ICMPHeader {
+public final class AddressMaskRequest extends ICMPv4Header {
     // m_mask = 0
 
     /**
@@ -56,7 +56,7 @@ public final class AddressMaskRequest extends ICMPHeader {
      * 
      */
     public AddressMaskRequest() {
-        super(ICMPHeader.TYPE_ADDRESS_MASK_REQUEST, (byte) 0);
+        super(ICMPv4Header.TYPE_ADDRESS_MASK_REQUEST, (byte) 0);
     }
 
     /**

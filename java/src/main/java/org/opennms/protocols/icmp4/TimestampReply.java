@@ -36,11 +36,11 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.icmp;
+package org.opennms.protocols.icmp4;
 
 import java.util.Date;
 
-import org.opennms.protocols.ip.OC16ChecksumProducer;
+import org.opennms.protocols.ipv4.OC16ChecksumProducer;
 
 /**
  * This is the implementation of an ICMP timestamp reply object. The object can
@@ -50,7 +50,7 @@ import org.opennms.protocols.ip.OC16ChecksumProducer;
  * @author Brian Weaver
  * @version 0.1
  */
-public final class TimestampReply extends ICMPHeader {
+public final class TimestampReply extends ICMPv4Header {
     private int m_origStamp;
 
     private int m_recvStamp;
@@ -62,7 +62,7 @@ public final class TimestampReply extends ICMPHeader {
      * 
      */
     public TimestampReply() {
-        super(ICMPHeader.TYPE_TIMESTAMP_REPLY, (byte) 0);
+        super(ICMPv4Header.TYPE_TIMESTAMP_REPLY, (byte) 0);
         m_origStamp = (int) ((new Date()).getTime() & 0xffffffff);
         m_recvStamp = m_origStamp;
         m_xmitStamp = m_origStamp;

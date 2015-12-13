@@ -36,9 +36,9 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.icmp;
+package org.opennms.protocols.icmp4;
 
-import org.opennms.protocols.ip.IPHeader;
+import org.opennms.protocols.ipv4.IPHeader;
 
 /**
  * Defines the default error handler object for processing ICMP error messages.
@@ -51,7 +51,7 @@ import org.opennms.protocols.ip.IPHeader;
  * @author Brian Weaver
  * 
  */
-public class ErrorMessage extends ICMPHeader {
+public class ErrorMessage extends ICMPv4Header {
     private IPHeader m_iphdr;
 
     private byte[] m_protoData;

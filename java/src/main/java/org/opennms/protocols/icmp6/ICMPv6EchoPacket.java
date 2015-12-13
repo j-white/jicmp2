@@ -29,7 +29,11 @@
  */
 package org.opennms.protocols.icmp6;
 
+import java.net.DatagramPacket;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
+
+import org.opennms.protocols.icmp.ICMPEchoPacket;
 
 
 /**
@@ -37,7 +41,7 @@ import java.nio.ByteBuffer;
  *
  * @author brozow
  */
-public class ICMPv6EchoPacket extends ICMPv6Packet {
+public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
 
     // This long is equivalent to 'OpenNMS!' in ascii
     public static final long COOKIE = 0x4F70656E4E4D5321L;
@@ -130,7 +134,10 @@ public class ICMPv6EchoPacket extends ICMPv6Packet {
     public void setCookie() {
         getDataBuffer().putLong(DATA_OFFSET_COOKIE, COOKIE);
     }
-    
 
-
+    @Override
+    public DatagramPacket toDatagram(InetAddress target) {
+        final byte[] requestData = toBytes();
+        return new DatagramPacket(requestData, requestData.length, target, 0);
+    }
 }

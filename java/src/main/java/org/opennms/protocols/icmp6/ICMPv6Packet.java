@@ -139,9 +139,8 @@ public class ICMPv6Packet {
     public void setUnsignedShort(int index, int us) {
         m_packetData.putShort(index, ((short)(us & 0xffff)));
     }
-    
-    final public byte[] toBytes() {
+
+    public byte[] toBytes() {
         return m_packetData.array();
     }
-
 }

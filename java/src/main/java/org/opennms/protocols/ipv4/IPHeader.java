@@ -32,7 +32,7 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.ip;
+package org.opennms.protocols.ipv4;
 
 import java.util.ArrayList;
 import java.util.Iterator;

@@ -35,7 +35,7 @@
 //
 // Tab Size = 8
 //
-package org.opennms.protocols.ip;
+package org.opennms.protocols.ipv4;
 
 /**
  * This exception is thrown when the IP version is not supported by the IPHeader

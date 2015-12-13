@@ -47,8 +47,8 @@
                         <goal>javah</goal>
                     </goals>
                     <configuration>
-                        <javahClass>org.opennms.protocols.icmp.IcmpSocket</javahClass>
-                        <javahOutputFilePath>${project.basedir}/../jni/include/IcmpSocket_java_interface.h</javahOutputFilePath>
+                        <javahClass>org.opennms.protocols.icmp.ICMPSocket</javahClass>
+                        <javahOutputFilePath>${project.basedir}/../jni/include/ICMPSocket_java_interface.h</javahOutputFilePath>
                     </configuration>
                 </execution>
             </executions>

@@ -36,34 +36,34 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.icmp;
+package org.opennms.protocols.icmp4;
 
-import org.opennms.protocols.ip.OC16ChecksumProducer;
+import java.util.Date;
+
+import org.opennms.protocols.ipv4.OC16ChecksumProducer;
 
 /**
- * This is the implementation of an ICMP Address Mask Reply object. The object
+ * This is the implementation of an ICMP timestamp reqeust object. The object
  * can be stored in a buffer to send or loaded from a received buffer. The class
  * is marked final since it is not intended to be extended.
- *
+ * 
  * @author Brian Weaver
+ * @version 0.1
  */
-public final class AddressMaskReply extends ICMPHeader {
-    /**
-     * The address mask
-     */
-    private int m_mask;
+public final class TimestampRequest extends ICMPv4Header {
+    private int m_origStamp;
 
     /**
-     * Creates a new ICMP Address Mask Request object.
+     * Creates a new ICMP Timestamp Request object.
      * 
      */
-    public AddressMaskReply() {
-        super(ICMPHeader.TYPE_ADDRESS_MASK_REPLY, (byte) 0);
-        m_mask = 0;
+    public TimestampRequest() {
+        super(ICMPv4Header.TYPE_TIMESTAMP_REQUEST, (byte) 0);
+        m_origStamp = (int) ((new Date()).getTime() & 0xffffffff);
     }
 
     /**
-     * Creates a new ICMP Address mask reply from the spcified data at the
+     * Creates a new ICMP timestamp request from the spcified data at the
      * specific offset.
      * 
      * @param buf
@@ -74,9 +74,9 @@ public final class AddressMaskReply extends ICMPHeader {
      * @exception java.lang.IndexOutOfBoundsException
      *                Thrown if there is not sufficent data in the buffer.
      * @exception java.lang.IllegalArgumentException
-     *                Thrown if the ICMP type is not an Address Mask reply.
+     *                Thrown if the ICMP type is not an Timestamp Request.
      */
-    public AddressMaskReply(byte[] buf, int offset) {
+    public TimestampRequest(byte[] buf, int offset) {
         super();
         loadFromBuffer(buf, offset);
     }
@@ -89,12 +89,14 @@ public final class AddressMaskReply extends ICMPHeader {
         OC16ChecksumProducer summer = new OC16ChecksumProducer();
         super.computeChecksum(summer);
 
-        summer.add(m_mask);
+        summer.add(m_origStamp);
+        summer.add((int) 0);
+        summer.add((int) 0);
         setChecksum(summer.getChecksum());
     }
 
     /**
-     * Writes the ICMP address mask reply out to the specified buffer at the
+     * Writes the ICMP address mask request out to the specified buffer at the
      * starting offset. If the buffer does not have sufficent data to store the
      * information then an IndexOutOfBoundsException is thrown.
      * 
@@ -110,19 +112,25 @@ public final class AddressMaskReply extends ICMPHeader {
      * 
      */
     public final int storeToBuffer(byte[] buf, int offset) {
-        if (buf.length < (offset + 12))
+        if (buf.length < (offset + 20))
             throw new IndexOutOfBoundsException("Array index overflow in buffer build");
 
         computeChecksum();
         offset = super.storeToBuffer(buf, offset);
 
         //
+        // store the current timestamp
+        //
+        buf[offset++] = (byte) ((m_origStamp >> 24) & 0xff);
+        buf[offset++] = (byte) ((m_origStamp >> 16) & 0xff);
+        buf[offset++] = (byte) ((m_origStamp >> 8) & 0xff);
+        buf[offset++] = (byte) (m_origStamp & 0xff);
+
+        //
         // add in the 32-bit zero mask
         //
-        buf[offset++] = (byte) ((m_mask >> 24) & 0xff);
-        buf[offset++] = (byte) ((m_mask >> 16) & 0xff);
-        buf[offset++] = (byte) ((m_mask >> 8) & 0xff);
-        buf[offset++] = (byte) (m_mask & 0xff);
+        for (int x = 0; x < 8; x++)
+            buf[offset++] = 0;
 
         return offset;
     }
@@ -144,45 +152,63 @@ public final class AddressMaskReply extends ICMPHeader {
      * @exception java.lang.IndexOutOfBoundsException
      *                Thrown if there is not sufficent data in the buffer.
      * @exception java.lang.IllegalArgumentException
-     *                Thrown if the ICMP type is not an Address Mask reply.
+     *                Thrown if the ICMP type is not an Timestamp Request.
      */
     public final int loadFromBuffer(byte[] buf, int offset) {
-        if (buf.length < (offset + 12))
+        if (buf.length < (offset + 20))
             throw new IndexOutOfBoundsException("Insufficient data to load ICMP header");
 
         offset = super.loadFromBuffer(buf, offset);
 
-        if (getType() != TYPE_ADDRESS_MASK_REPLY)
-            throw new IllegalArgumentException("The buffer did not contain an Address Mask Reply");
+        if (getType() != TYPE_TIMESTAMP_REQUEST)
+            throw new IllegalArgumentException("The buffer did not contain an Timestamp Request");
 
-        //
-        // get the mask
-        //
-        m_mask = (byteToInt(buf[offset++]) << 24) | (byteToInt(buf[offset++]) << 16) | (byteToInt(buf[offset++]) << 8) | byteToInt(buf[offset++]);
+        m_origStamp = byteToInt(buf[offset++]) << 24 | byteToInt(buf[offset++]) << 16 | byteToInt(buf[offset++]) << 8 | byteToInt(buf[offset++]);
+
+        offset += 8;
 
         return offset;
     }
 
     /**
-     * Used to get the IPv4 32-bit address mask.
+     * Sets the originate timestamp to the current date in millisecond
+     * resolution.
+     * 
+     * @see java.util.Date#getTime
+     * 
      */
-    public final int getAddressMask() {
-        return m_mask;
+    public final void setOriginateTS() {
+        m_origStamp = (int) ((new Date()).getTime() & 0xffffffff);
     }
 
     /**
-     * Used to set the IPv4 32-bit address mask.
+     * Sets the originate timestamp to the passed value.
+     * 
+     * @param ts
+     *            The timestamp in milliseconds
+     * 
      */
-    public final void setAddressMask(int mask) {
-        m_mask = mask;
+    public final void setOriginateTS(int ts) {
+        m_origStamp = ts;
     }
 
     /**
-     * Converts the object to a stream of bytes.
+     * Retreives the current timestamp of the reqeust object.
+     * 
+     * @return The 32-bit timestamp in milliseconds.
+     * 
+     */
+    public final int getOriginateTS() {
+        return m_origStamp;
+    }
+
+    /**
+     * Converts the object to an array of bytes.
+     * 
      */
     public final byte[] toBytes() {
-        byte[] buf = new byte[12];
-        storeToBuffer(buf, 0);
-        return buf;
+        byte[] b = new byte[20];
+        storeToBuffer(b, 0);
+        return b;
     }
 }

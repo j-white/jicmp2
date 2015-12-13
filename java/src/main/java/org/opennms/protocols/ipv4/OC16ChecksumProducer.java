@@ -32,7 +32,7 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.ip;
+package org.opennms.protocols.ipv4;
 
 /**
  * Produces a one's compliment 16-bit checksum from data that is "added" to the
