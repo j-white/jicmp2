@@ -1,7 +1,7 @@
 # Debian
 debian/*.log
 debian/files
-debian/jrrd2*
+debian/jicmp2*
 debian/substvars
 
 # CMake

@@ -58,7 +58,7 @@ public class IcmpSocketTest {
 
     @Test
     public void canLoadLibrary() throws IOException {
-        try (IcmpSocket socket = new IcmpSocket(1)) {
+        try (IcmpSocket socket = new IcmpSocket(1, false)) {
         } catch (SocketException e) {
             // Socket initialization can fail with (1, Operation not permitted)
             // this means we were at least able to load the library

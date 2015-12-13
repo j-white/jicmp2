@@ -8,6 +8,7 @@
 #cmakedefine HAVE_NETINET_IN_H
 #cmakedefine HAVE_NETINET_IP_H
 #cmakedefine HAVE_NETINET_IP_ICMP_H
+#cmakedefine HAVE_NETINET_ICMP6_H
 #cmakedefine HAVE_NETDB_H
 #cmakedefine HAVE_ERRNO_H
 

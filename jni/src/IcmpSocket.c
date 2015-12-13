@@ -136,18 +136,53 @@ unsigned short checksum(register unsigned short *p, register int sz)
 }
 
 /**
+ * Returns the socket family, i.e. AF_INET (IPv4) or AF_INET6 (IPv6)
+ * to use for this IcmpSocket instance.
+ */
+static int getSocketFamily(JNIEnv *env, jobject instance) {
+    jclass  thisClass = NULL;
+
+    jfieldID thisIdField = NULL;
+
+    int socketFamily = AF_INET;
+
+    // Find the class that describes ourself.
+    thisClass = (*env)->GetObjectClass(env, instance);
+    if(thisClass == NULL)
+        goto end_getid;
+
+    // Grab a reference to the field that stores the id
+    thisIdField = (*env)->GetFieldID(env, thisClass, "m_useIPv6", "Z");
+    if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL)
+        goto end_getid;
+
+    // We're done with the reference to the class
+    (*env)->DeleteLocalRef(env, thisClass);
+    thisClass = NULL;
+
+    // Grab the value
+    jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, thisIdField);
+    if (using_ipv6 == JNI_TRUE) {
+        socketFamily = AF_INET6;
+    }
+
+end_getid:
+    return socketFamily;
+}
+
+/**
 * This method is used to retrieve the value of the pinger ID
 * from the IcmpSocket instance.
 */
 static int getPingerId(JNIEnv *env, jobject instance)
 {
-        jclass  thisClass = NULL;
+    jclass  thisClass = NULL;
 
-        jfieldID thisIdField = NULL;
+    jfieldID thisIdField = NULL;
 
 	int pingerId = 0;
 
-        // Find the class that describes ourself.
+    // Find the class that describes ourself.
 	thisClass = (*env)->GetObjectClass(env, instance);
 	if(thisClass == NULL)
 		goto end_getid;
@@ -385,6 +420,62 @@ end_inet:
 	return addrInstance;
 }
 
+
+static jobject newInetAddressV6(JNIEnv *env, unsigned char addr[])
+{
+	jclass		addrClass;
+	jmethodID	addrByAddressMethodID;
+	jobject 	addrInstance = NULL;
+	jbyteArray      addrArray = NULL;
+
+	/**
+	 * copy the address into a jbyteArray
+         */
+	addrArray = (*env)->NewByteArray(env, 16);
+	if(addrArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
+	{
+		(*env)->SetByteArrayRegion(env,
+								   addrArray,
+								   0,
+								   (jsize)16,
+								   (jbyte *)addr);
+	}
+	if ((*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	/**
+	* load the class
+	*/
+	addrClass = (*env)->FindClass(env, "java/net/InetAddress");
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	/**
+	* Find the static method
+	*/
+	addrByAddressMethodID = (*env)->GetStaticMethodID(env,
+													  addrClass,
+													  "getByAddress",
+													  "([B)Ljava/net/InetAddress;");
+	if(addrByAddressMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	/*
+	* Invoke it!
+	*/
+	addrInstance = (*env)->CallStaticObjectMethod(env,
+												  addrClass,
+												  addrByAddressMethodID,
+												  addrArray);
+
+	(*env)->DeleteLocalRef(env, addrClass);
+	(*env)->DeleteLocalRef(env, addrArray);
+	end_inet:
+
+	return addrInstance;
+}
+
+
 static in_addr_t getInetAddress(JNIEnv *env, jobject instance)
 {
 	jclass		addrClass = NULL;
@@ -434,6 +525,55 @@ end_inet:
 	return retAddr;
 }
 
+static void getInet6Address(JNIEnv *env, jobject instance, unsigned char addr[])
+{
+	jclass		addrClass = NULL;
+	jmethodID	addrArrayMethodID = NULL;
+	jbyteArray	addrData = NULL;
+
+
+	/**
+	* load the class
+	*/
+	addrClass = (*env)->GetObjectClass(env, instance);
+	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	/**
+	* Find the method
+	*/
+	addrArrayMethodID = (*env)->GetMethodID(env,
+											addrClass,
+											"getAddress",
+											"()[B");
+	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	addrData = (*env)->CallObjectMethod(env,instance,addrArrayMethodID);
+	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL)
+		goto end_inet;
+
+	/*
+	* The byte array returned from java.net.InetAddress.getAddress()
+	* (which was fetched above and is stored as a jbyteArray in addrData)
+	* is in network byte order (high byte first, AKA big endian).
+	* the value of addr is also in network byte order, so no
+	* conversion needs to be performed.
+	*/
+	(*env)->GetByteArrayRegion(env,
+							   addrData,
+							   0,
+							   16,
+							   (jbyte *)addr);
+
+	(*env)->DeleteLocalRef(env, addrClass);
+	(*env)->DeleteLocalRef(env, addrData);
+
+	end_inet:
+	return;
+}
+
+
 static void throwError(JNIEnv *env, char *exception, char *errorBuffer)
 {
 	jclass ioException = (*env)->FindClass(env, exception);
@@ -475,53 +615,69 @@ Java_org_opennms_protocols_icmp_IcmpSocket_initSocket (JNIEnv *env, jobject inst
 		throwError(env, "java/net/IOException", errBuf);
 		return;
 	}
-
 #endif
 
-	proto = getprotobyname("icmp");
-	if (proto == (struct protoent *) NULL) {
-		char	errBuf[128];	/* for exceptions */
-		sprintf(errBuf, "Could not get protocol entry for 'icmp'.  The getprotobyname(\"icmp\") system call returned NULL.");
-		throwError(env, "java/net/SocketException", errBuf);
-		return;
+    int protocol;
+    int family = getSocketFamily(env, instance);
+    if (family == AF_INET) {
+        protocol = IPPROTO_ICMP;
+    } else if (family == AF_INET6) {
+        protocol = IPPROTO_ICMPV6;
+    } else {
+        // TODO: Fail.
+    }
+
+    // Attempt to use a diagram (UDP) socket
+    int type = SOCK_DGRAM;
+    icmp_fd = socket(family, type, protocol);
+	if (icmp_fd == SOCKET_ERROR) {
+        // We weren't able to succesfully aquire the diagram socket, let's try a raw socket instead
+        type = SOCK_RAW;
+        icmp_fd = socket(family, type, protocol);
+        if (icmp_fd == SOCKET_ERROR) {
+		    char errBuf[128];
+		    int	savedErrno  = errno;
+		    snprintf(errBuf, sizeof(errBuf), "System error creating ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
+		    throwError(env, "java/net/SocketException", errBuf);
+		    return;
+        }
 	}
 
-	char useDgramSocket = 0;
-#if HAVE_GETENV
-	if (getenv ("JICMP_USE_SOCK_DGRAM") != NULL) {
-		useDgramSocket = 1;
-		sock_type = SOCK_DGRAM;
-	}
-#endif
-	icmp_fd = socket(AF_INET, sock_type, proto->p_proto);
+    if (type == SOCK_DGRAM) {
+        // When using a diagram socket on Linux, the ID in the ICMP Echo Request header
+        // is replaced with the source port. In order to generate packets with the
+        // correct ID we need to bind the socket to this port.
+        
+        int pingerId = getPingerId(env, instance);
+      
+        if (family == AF_INET6) {
+		    struct sockaddr_in6 source_address;
+		    memset(&source_address, 0, sizeof(struct sockaddr_in6));
+		    source_address.sin6_family = family;
+		    source_address.sin6_port = htons(pingerId);
 
-	if(icmp_fd == SOCKET_ERROR)
-	{
-		char	errBuf[128];	/* for exceptions */
-		int	savedErrno  = errno;
-		snprintf(errBuf, sizeof(errBuf), "System error creating ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
-		throwError(env, "java/net/SocketException", errBuf);
-		return;
-	}
+		    if(bind(icmp_fd, (struct sockaddr *)&source_address, sizeof(struct sockaddr_in6))) {
+		    	char errBuf[128];
+		    	int	savedErrno  = errno;
+		    	snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMPv6 socket (%d, %s)", savedErrno, strerror(savedErrno));
+		    	throwError(env, "java/net/SocketException", errBuf);
+		    	return;
+		    }
+        } else {
+		    struct sockaddr_in source_address;
+		    memset(&source_address, 0, sizeof(struct sockaddr_in));
+		    source_address.sin_family = family;
+		    source_address.sin_port = htons(pingerId);
 
-	if (useDgramSocket) {
-		// When using a diagram socket on Linux, the ID in the ICMP Echo Request header
-		// is replaced with the source port. In order to generate packets with the
-		// correct ID we need to bind the socket to this port.
-
-		struct sockaddr_in source_address;
-		memset(&source_address, 0, sizeof(struct sockaddr_in));
-		source_address.sin_family = AF_INET;
-		source_address.sin_port = htons(getPingerId(env, instance));
-
-		if(bind(icmp_fd, (struct sockaddr *)&source_address, sizeof(struct sockaddr))) {
-			char	errBuf[128];	/* for exceptions */
-			int	savedErrno  = errno;
-			snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
-			throwError(env, "java/net/SocketException", errBuf);
-			return;
-		}
-	}
+		    if(bind(icmp_fd, (struct sockaddr *)&source_address, sizeof(struct sockaddr_in))) {
+		    	char errBuf[128];
+		    	int	savedErrno  = errno;
+		    	snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMPv4 socket (%d, %s)", savedErrno, strerror(savedErrno));
+		    	throwError(env, "java/net/SocketException", errBuf);
+		    	return;
+		    }
+        }
+    }
 
 	setIcmpFd(env, instance, icmp_fd);
 	return;
@@ -536,12 +692,21 @@ Java_org_opennms_protocols_icmp_IcmpSocket_initSocket (JNIEnv *env, jobject inst
 JNIEXPORT jobject JNICALL
 Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instance)
 {
-	struct sockaddr_in	inAddr;
-	onms_socklen_t		inAddrLen;
+
 	int			iRC;
 	void *			inBuf = NULL;
-	iphdr_t *		ipHdr = NULL;
-	icmphdr_t *		icmpHdr = NULL;
+
+	onms_socklen_t		inAddrLen;
+	struct sockaddr*    inAddr;
+
+
+	struct sockaddr_in	inAddrV4;
+
+	iphdr_t *		ip4Hdr = NULL;
+	icmphdr_t *		icmp4Hdr = NULL;
+
+	struct sockaddr_in6	inAddrV6;
+	struct icmp6_hdr *	icmp6Hdr = NULL;
 
 	jbyteArray		byteArray 	= NULL;
 	jobject			addrInstance 	= NULL;
@@ -549,6 +714,7 @@ Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instanc
 	jclass			datagramClass 	= NULL;
 	jmethodID		datagramCtorID 	= NULL;
 
+	int family = getSocketFamily(env, instance);
 
 	/**
 	* Get the current descriptor's value
@@ -571,6 +737,7 @@ Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instanc
 	* must be dynamic for MT-Safe reasons and avoids blowing
 	* up the stack.
 	*/
+	//FIXME: Is this really necessary?
 	inBuf = malloc(MAX_PACKET);
 	if(inBuf == NULL)
 	{
@@ -584,15 +751,22 @@ Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instanc
 	* operating system will store the to/from address
 	* information.
 	*/
-	memset((void *)&inAddr, 0, sizeof(inAddr));
-	inAddrLen = sizeof(inAddr);
+	if (family == AF_INET) {
+		memset((void *)&inAddrV4, 0, sizeof(inAddrV4));
+		inAddrLen = sizeof(inAddrV4);
+		inAddr = (struct sockaddr *)&inAddrV4;
+	} else if (family == AF_INET6) {
+		memset((void *)&inAddrV6, 0, sizeof(inAddrV6));
+		inAddrLen = sizeof(inAddrV6);
+		inAddr = (struct sockaddr *)&inAddrV6;
+	}
 
 	/**
 	* Receive the data from the operating system. This
 	* will also include the IP header that precedes
 	* the ICMP data, we'll strip that off later.
 	*/
-	iRC = recvfrom(fd_value, inBuf, MAX_PACKET, 0, (struct sockaddr *)&inAddr, &inAddrLen);
+	iRC = recvfrom(fd_value, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
 	if(iRC == SOCKET_ERROR)
 	{
 		/*
@@ -613,91 +787,163 @@ Java_org_opennms_protocols_icmp_IcmpSocket_receive (JNIEnv *env, jobject instanc
 		goto end_recv;
 	}
 
-	/**
-	* update the length by removing the IP
-	* header from the message. Don't forget to decrement
-	* the bytes received by the size of the IP header.
-	*
-	* NOTE: The ip_hl field of the IP header is the number
-	* of 4 byte values in the header. Thus the ip_hl must
-	* be multiplied by 4 (or shifted 2 bits).
-	*/
-	ipHdr = (iphdr_t *)inBuf;
-	iRC -= ipHdr->ONMS_IP_HL << 2;
-	if(iRC <= 0)
-	{
-		throwError(env, "java/io/IOException", "Malformed ICMP datagram received");
-		goto end_recv;
-	}
-	icmpHdr = (icmphdr_t *)((char *)inBuf + (ipHdr->ONMS_IP_HL << 2));
-
-	/**
-	* Check the ICMP header for type equal 0, which is ECHO_REPLY, and
-	* then check the payload for the 'OpenNMS!' marker. If it's one
-	* we sent out then fix the recv time!
-	*
-	* Don't forget to check for a buffer overflow!
-	*/
-	if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		&& icmpHdr->ICMP_TYPE == 0
-		&& memcmp((char *)icmpHdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-	{
-		uint64_t now;
-		uint64_t sent;
-		uint64_t diff;
+	if (family == AF_INET) {
+		/**
+        * update the length by removing the IP
+        * header from the message. Don't forget to decrement
+        * the bytes received by the size of the IP header.
+        *
+        * NOTE: The ip_hl field of the IP header is the number
+        * of 4 byte values in the header. Thus the ip_hl must
+        * be multiplied by 4 (or shifted 2 bits).
+        */
+		ip4Hdr = (iphdr_t *)inBuf;
+		iRC -= ip4Hdr->ONMS_IP_HL << 2;
+		if(iRC <= 0)
+		{
+			throwError(env, "java/io/IOException", "Malformed ICMP datagram received");
+			goto end_recv;
+		}
+		icmp4Hdr = (icmphdr_t *)((char *)inBuf + (ip4Hdr->ONMS_IP_HL << 2));
 
 		/**
-		* get the current time in microseconds and then
-		* compute the difference
+        * Check the ICMP header for type equal 0, which is ECHO_REPLY, and
+        * then check the payload for the 'OpenNMS!' marker. If it's one
+        * we sent out then fix the recv time!
+        *
+        * Don't forget to check for a buffer overflow!
+        */
+		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && icmp4Hdr->ICMP_TYPE == 0
+		   && memcmp((char *)icmp4Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
+		{
+			uint64_t now;
+			uint64_t sent;
+			uint64_t diff;
+
+			/**
+            * get the current time in microseconds and then
+            * compute the difference
+            */
+			CURRENTTIMEMICROS(now);
+			memcpy((char *)&sent, (char *)icmp4Hdr + SENTTIME_OFFSET, TIME_LENGTH);
+			sent = ntohll(sent);
+			diff = now - sent;
+
+			/*
+            * Now fill in the sent, received, and diff
+            */
+			sent = MICROS_TO_MILLIS(sent);
+			sent = htonll(sent);
+			memcpy((char *)icmp4Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
+
+			now  = MICROS_TO_MILLIS(now);
+			now  = htonll(now);
+			memcpy((char *)icmp4Hdr + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+
+			diff = htonll(diff);
+			memcpy((char *)icmp4Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
+
+			/* no need to recompute checksum on this on
+            * since we don't actually check it upon receipt
+            */
+		}
+
+		/**
+        * Now construct a new java.net.InetAddress object from
+        * the recipt information. The network address must
+        * be passed in network byte order!
+        */
+		addrInstance = newInetAddress(env, inAddrV4.sin_addr.s_addr);
+		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+			goto end_recv;
+
+		/**
+        * Get the byte array needed to setup
+        * the datagram constructor.
+        */
+		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
+		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
+		{
+			(*env)->SetByteArrayRegion(env,
+									   byteArray,
+									   0,
+									   (jsize)iRC,
+									   (jbyte *)icmp4Hdr);
+		}
+		if((*env)->ExceptionOccurred(env) != NULL)
+			goto end_recv;
+	} else if (family == AF_INET6) {
+		icmp6Hdr = (struct icmp6_hdr *)((char *)inBuf);
+
+		/**
+        * Check the ICMP header for type ECHO_REPLY, and
+        * then check the payload for the 'OpenNMS!' marker. If it's one
+        * we sent out then fix the recv time!
+        *
+        * Don't forget to check for a buffer overflow!
+        */
+		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && icmp6Hdr->icmp6_type == ICMP6_ECHO_REPLY
+		   && memcmp((char *)icmp6Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
+		{
+			uint64_t now;
+			uint64_t sent;
+			uint64_t diff;
+
+			/**
+            * get the current time in microseconds and then
+            * compute the difference
+            */
+			CURRENTTIMEMICROS(now);
+			memcpy((char *)&sent, (char *)icmp6Hdr + SENTTIME_OFFSET, TIME_LENGTH);
+			sent = ntohll(sent);
+			diff = now - sent;
+
+			/*
+            * Now fill in the sent, received, and diff
+            */
+			sent = MICROS_TO_MILLIS(sent);
+			sent = htonll(sent);
+			memcpy((char *)icmp6Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
+
+			now  = MICROS_TO_MILLIS(now);
+			now  = htonll(now);
+			memcpy((char *)icmp6Hdr + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+
+			diff = htonll(diff);
+			memcpy((char *)icmp6Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
+
+			/* no need to recompute checksum on this on
+            * since we don't actually check it upon receipt
+            */
+		}
+
+		/**
+        * Now construct a new java.net.InetAddress object from
+        * the recipt information. The network address must
+        * be passed in network byte order!
+        */
+		addrInstance = newInetAddressV6(env, inAddrV6.sin6_addr.s6_addr);
+		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
+			goto end_recv;
+
+		/**
+		* Get the byte array needed to setup
+		* the datagram constructor.
 		*/
-		CURRENTTIMEMICROS(now);
-		memcpy((char *)&sent, (char *)icmpHdr + SENTTIME_OFFSET, TIME_LENGTH);
-		sent = ntohll(sent);
-		diff = now - sent;
-
-		/*
-		* Now fill in the sent, received, and diff
-		*/
-		sent = MICROS_TO_MILLIS(sent);
-		sent = htonll(sent);
-		memcpy((char *)icmpHdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
-
-		now  = MICROS_TO_MILLIS(now);
-		now  = htonll(now);
-		memcpy((char *)icmpHdr + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-
-		diff = htonll(diff);
-		memcpy((char *)icmpHdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
-
-		/* no need to recompute checksum on this on
-		* since we don't actually check it upon receipt
-		*/
+		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
+		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
+		{
+			(*env)->SetByteArrayRegion(env,
+									   byteArray,
+									   0,
+									   (jsize)iRC,
+									   (jbyte *)icmp6Hdr);
+		}
+		if((*env)->ExceptionOccurred(env) != NULL)
+			goto end_recv;
 	}
-
-	/**
-	* Now construct a new java.net.InetAddress object from
-	* the recipt information. The network address must
-	* be passed in network byte order!
-	*/
-	addrInstance = newInetAddress(env, inAddr.sin_addr.s_addr);
-	if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
-		goto end_recv;
-
-	/**
-	* Get the byte array needed to setup
-	* the datagram constructor.
-	*/
-	byteArray = (*env)->NewByteArray(env, (jsize)iRC);
-	if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL)
-	{
-		(*env)->SetByteArrayRegion(env,
-			byteArray,
-			0,
-			(jsize)iRC,
-			(jbyte *)icmpHdr);
-	}
-	if((*env)->ExceptionOccurred(env) != NULL)
-		goto end_recv;
 
 	/**
 	* get the datagram class
@@ -753,15 +999,17 @@ Java_org_opennms_protocols_icmp_IcmpSocket_send (JNIEnv *env, jobject instance, 
 	jclass		dgramClass;
 	jmethodID	dgramGetDataID;
 	jmethodID	dgramGetAddrID;
-
 	jobject		addrInstance;
 	jbyteArray	icmpDataArray;
-	unsigned long	netAddr   = 0UL;
+
 	char *		outBuffer = NULL;
 	jsize		bufferLen = 0;
 	int		iRC;
-	struct sockaddr_in Addr;
 
+	struct sockaddr_in AddrV4;
+	struct sockaddr_in6 AddrV6;
+
+    int family = getSocketFamily(env, instance);
 
 	/**
 	* Recover the operating system file descriptor
@@ -815,9 +1063,23 @@ Java_org_opennms_protocols_icmp_IcmpSocket_send (JNIEnv *env, jobject instance, 
 	if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL)
 		goto end_send;
 
-	netAddr = getInetAddress(env, addrInstance);
-	if((*env)->ExceptionOccurred(env) != NULL)
-		goto end_send;
+	/**
+* Set up the address
+*/
+	if (family == AF_INET) {
+		memset(&AddrV4, 0, sizeof(AddrV4));
+		AddrV4.sin_family = AF_INET;
+		AddrV4.sin_port   = 0;
+		AddrV4.sin_addr.s_addr = getInetAddress(env, addrInstance);
+		if((*env)->ExceptionOccurred(env) != NULL)
+			goto end_send;
+	} else if (family == AF_INET6) {
+		memset(&AddrV6, 0, sizeof(AddrV6));
+		AddrV6.sin6_family = AF_INET6;
+		AddrV6.sin6_port   = 0;
+
+		getInet6Address(env, addrInstance, AddrV6.sin6_addr.s6_addr);
+	}
 
 	/**
 	* Remove local references that are no longer needed
@@ -884,38 +1146,58 @@ Java_org_opennms_protocols_icmp_IcmpSocket_send (JNIEnv *env, jobject instance, 
 	* Don't forget to check for a potential buffer
 	* overflow!
 	*/
-	if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		&& ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
-		&& memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
-	{
-		uint64_t now = 0;
+	if (family == AF_INET) {
+		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
+		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
+		{
+			uint64_t now = 0;
 
-		memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-		memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
+			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+			memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
 
-		CURRENTTIMEMICROS(now);
-		now = htonll(now);
-		memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
+			CURRENTTIMEMICROS(now);
+			now = htonll(now);
+			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
 
-		/* recompute the checksum */
-		((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
-		((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = checksum((unsigned short *)outBuffer, bufferLen);
+			/* recompute the checksum */
+			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
+			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = checksum((unsigned short *)outBuffer, bufferLen);
+		}
+
+		iRC = sendto(icmpfd,
+					 (void *)outBuffer,
+					 (int)bufferLen,
+					 0,
+					 (struct sockaddr *)&AddrV4,
+					 sizeof(AddrV4));
+	} else if (family == AF_INET6) {
+		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && ((struct icmp6_hdr *)outBuffer)->icmp6_type == ICMP6_ECHO_REQUEST
+		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0)
+		{
+			uint64_t now = 0;
+
+			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+			memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
+
+			CURRENTTIMEMICROS(now);
+			now = htonll(now);
+			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
+
+			/* checksum will be computed by system */
+			((struct icmp6_hdr *)outBuffer)->icmp6_cksum = 0;
+
+		}
+
+		iRC = sendto(icmpfd,
+					 (void *)outBuffer,
+					 (int)bufferLen,
+					 0,
+					 (struct sockaddr *)&AddrV6,
+					 sizeof(AddrV6));
 	}
 
-	/**
-	* Send the data
-	*/
-	memset(&Addr, 0, sizeof(Addr));
-	Addr.sin_family = AF_INET;
-	Addr.sin_port   = 0;
-	Addr.sin_addr.s_addr = netAddr;
-
-	iRC = sendto(icmpfd,
-		(void *)outBuffer,
-		(int)bufferLen,
-		0,
-		(struct sockaddr *)&Addr,
-		sizeof(Addr));
 
 	if(iRC == SOCKET_ERROR && errno == EACCES)
 	{
