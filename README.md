@@ -1,9 +1,9 @@
 jicmp2
 ======
 
-jicmp2 provides a native ICMP interface for Java with support for both IPv4 and IPv6.
+jicmp2 provides a Java native interface for sending and receiving ICMPv4/v6 Echo Packets.
 
-It is a rewrite and successor of [jicmp](https://github.com/OpenNMS/jicmp).
+It is a rewrite and successor of [jicmp](https://github.com/OpenNMS/jicmp) (and [jicmp6](https://github.com/OpenNMS/jicmp6)).
 
 Building
 --------
