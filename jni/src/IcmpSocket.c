@@ -321,39 +321,37 @@ end_inet:
 */
 JNIEXPORT void JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject instance) {
-	char errBuf[128];
-	struct protoent *proto;
-	int sock_type = SOCK_RAW;
+	char exception_msg[256];
+	char error_msg[128];
 #ifdef __WIN32__
 	int result;
 	WSADATA info;
 	result = WSAStartup(MAKEWORD(2,2), &info);
 	if (result != 0) {
-		sprintf(errBuf, "WSAStartup failed: %d", result);
-		throwError(env, "java/net/IOException", errBuf);
+		snprintf(error_msg, sizeof(error_msg), "WSAStartup failed: %d", result);
+		throwError(env, "java/net/IOException", error_msg);
 		return;
 	}
 #endif
 
+	// Lookup the instance specific attributes
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		return;
 	}
 
+    // Attempt to open a diagram (UDP) socket
 	int protocol = attr.family == AF_INET ? IPPROTO_ICMP : IPPROTO_ICMPV6;
-
-    // Attempt to use a diagram (UDP) socket
-    int type = SOCK_DGRAM;
-    attr.fd = socket(attr.family, type, protocol);
+    attr.fd = socket(attr.family, SOCK_DGRAM, protocol);
 	if (attr.fd == SOCKET_ERROR) {
         // We weren't able to successfully acquire the diagram socket, let's try a raw socket instead
-        type = SOCK_RAW;
-		attr.fd = socket(attr.family, type, protocol);
+		attr.fd = socket(attr.family, SOCK_RAW, protocol);
         if (attr.fd == SOCKET_ERROR) {
-		    int	savedErrno  = errno;
-		    snprintf(errBuf, sizeof(errBuf), "System error creating ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
-		    throwError(env, "java/net/SocketException", errBuf);
+		    int	saved_errno = errno;
+			strerror_r(saved_errno, error_msg, sizeof(error_msg));
+		    snprintf(exception_msg, sizeof(exception_msg), "System error creating ICMP socket (%d, %s)", saved_errno, error_msg);
+		    throwError(env, "java/net/SocketException", exception_msg);
 		    return;
         }
 	} else {
@@ -361,8 +359,8 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 		// When using a diagram socket on Linux, the ID in the ICMP Echo Request header
 		// is replaced with the source port. In order to generate packets with the
 		// correct ID we need to bind the socket to this port.
-		struct sockaddr *sourceAddr;
-		size_t sourceAddrSize;
+		struct sockaddr *source_addr;
+		size_t source_addr_len;
 
 		if (attr.family == AF_INET6) {
 			struct sockaddr_in6 source_address;
@@ -370,22 +368,23 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 			source_address.sin6_family = attr.family;
 			source_address.sin6_port = htons(attr.id);
 
-			sourceAddr = (struct sockaddr *)&source_address;
-			sourceAddrSize = sizeof(struct sockaddr_in6);
+			source_addr = (struct sockaddr *)&source_address;
+			source_addr_len = sizeof(struct sockaddr_in6);
 		} else {
 			struct sockaddr_in source_address;
 			memset(&source_address, 0, sizeof(struct sockaddr_in));
 			source_address.sin_family = attr.family;
 			source_address.sin_port = htons(attr.id);
 
-			sourceAddr = (struct sockaddr *)&source_address;
-			sourceAddrSize = sizeof(struct sockaddr_in);
+			source_addr = (struct sockaddr *)&source_address;
+			source_addr_len = sizeof(struct sockaddr_in);
 		}
 
-		if(bind(attr.fd, sourceAddr, sourceAddrSize)) {
-			int	savedErrno  = errno;
-			snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
-			throwError(env, "java/net/SocketException", errBuf);
+		if (bind(attr.fd, source_addr, source_addr_len)) {
+			int saved_errno = errno;
+			strerror_r(saved_errno, error_msg, sizeof(error_msg));
+			snprintf(exception_msg, sizeof(error_msg), "Failed to bind ICMP socket (%d, %s)", saved_errno, error_msg);
+			throwError(env, "java/net/SocketException", exception_msg);
 			return;
 		}
 	}
