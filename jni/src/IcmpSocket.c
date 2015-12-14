@@ -855,9 +855,15 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		goto end_send;
 	}
 
+	struct sockaddr * Addr;
+	size_t AddrLen;
+
 	// Set up the address
 	if (family == AF_INET) {
-		memset(&AddrV4, 0, sizeof(AddrV4));
+		Addr = (struct sockaddr*)&AddrV4;
+		AddrLen = sizeof(AddrV4);
+
+		memset(&AddrV4, 0, AddrLen);
 		AddrV4.sin_family = AF_INET;
 		AddrV4.sin_port   = 0;
 		AddrV4.sin_addr.s_addr = getInetAddress(env, addrInstance);
@@ -865,7 +871,10 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 			goto end_send;
 		}
 	} else if (family == AF_INET6) {
-		memset(&AddrV6, 0, sizeof(AddrV6));
+		Addr = (struct sockaddr*)&AddrV6;
+		AddrLen = sizeof(AddrV6);
+
+		memset(&AddrV6, 0, AddrLen);
 		AddrV6.sin6_family = AF_INET6;
 		AddrV6.sin6_port   = 0;
 
@@ -922,55 +931,44 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// and checksum for transmission. ICMP type
 	// must equal 8 for ECHO_REQUEST
 	// Don't forget to check for a potential buffer overflow!
+	char shouldUpdate = 0;
 	if (family == AF_INET) {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
 		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			uint64_t now = 0;
+			shouldUpdate = 1;
 
-			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-			memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
-
-			CURRENTTIMEMICROS(now);
-			now = htonll(now);
-			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
-
-			// Recompute the checksum
+			// Checksum will be computed by system
 			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
-			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = checksum((unsigned short *)outBuffer, bufferLen);
 		}
-
-		iRC = (int)sendto(icmpfd,
-					 (void *)outBuffer,
-					 (size_t)bufferLen,
-					 0,
-					 (struct sockaddr *)&AddrV4,
-					 sizeof(AddrV4));
 	} else if (family == AF_INET6) {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((struct icmp6_hdr *)outBuffer)->icmp6_type == ICMP6_ECHO_REQUEST
 		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			uint64_t now = 0;
-
-			memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-			memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
-
-			CURRENTTIMEMICROS(now);
-			now = htonll(now);
-			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
+			shouldUpdate = 1;
 
 			// Checksum will be computed by system
 			((struct icmp6_hdr *)outBuffer)->icmp6_cksum = 0;
-
 		}
-
-		iRC = (int)sendto(icmpfd,
-					 (void *)outBuffer,
-					 (size_t)bufferLen,
-					 0,
-					 (struct sockaddr *)&AddrV6,
-					 sizeof(AddrV6));
 	}
+
+	if (shouldUpdate) {
+		uint64_t now = 0;
+
+		memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+		memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
+
+		CURRENTTIMEMICROS(now);
+		now = htonll(now);
+		memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
+	}
+
+	iRC = (int)sendto(icmpfd,
+					  (void *)outBuffer,
+					  (size_t)bufferLen,
+					  0,
+					  Addr,
+					  AddrLen);
 
 	if(iRC == SOCKET_ERROR && errno == EACCES) {
 		throwError(env, "java/net/NoRouteToHostException", "cannot send to broadcast address");
