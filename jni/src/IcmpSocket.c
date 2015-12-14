@@ -646,13 +646,13 @@ end_recv:
 */
 JNIEXPORT void JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet) {
-	jclass dgramClass;
-	jmethodID dgramGetDataID;
-	jmethodID dgramGetAddrID;
-	jobject addrInstance;
-	jbyteArray icmpDataArray;
+	jclass dgram_class = NULL;
+	jmethodID dgram_get_data_method_id = NULL;
+	jmethodID dgram_get_addr_method_id = NULL;
+	jobject addr_instance = NULL;
+	jbyteArray icmp_byte_array = NULL;
 
-	char * outBuffer = NULL;
+	char *outBuffer = NULL;
 	jsize bufferLen = 0;
 	int iRC;
 
@@ -666,31 +666,28 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	}
 
 	// Get the DatagramPacket class information
-	dgramClass = (*env)->GetObjectClass(env, packet);
-	if(dgramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	dgram_class = (*env)->GetObjectClass(env, packet);
+	if (dgram_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
 	// Get the identifiers for the getData() and getAddress()
 	// methods that are part of the DatagramPacket class.
-	dgramGetDataID = (*env)->GetMethodID(env, dgramClass, "getData", "()[B");
-	if(dgramGetDataID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	dgram_get_data_method_id = (*env)->GetMethodID(env, dgram_class, "getData", "()[B");
+	if (dgram_get_data_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
-	dgramGetAddrID = (*env)->GetMethodID(env, dgramClass, "getAddress", "()Ljava/net/InetAddress;");
-	if(dgramGetAddrID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	dgram_get_addr_method_id = (*env)->GetMethodID(env, dgram_class, "getAddress", "()Ljava/net/InetAddress;");
+	if (dgram_get_addr_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
-
-	(*env)->DeleteLocalRef(env, dgramClass);
-	dgramClass = NULL;
 
 	// Get the address information from the DatagramPacket
 	// so that a useable Operating System address can
 	// be constructed.
-	addrInstance = (*env)->CallObjectMethod(env, packet, dgramGetAddrID);
-	if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	addr_instance = (*env)->CallObjectMethod(env, packet, dgram_get_addr_method_id);
+	if (addr_instance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
@@ -706,7 +703,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		AddrV4.sin_family = AF_INET;
 		AddrV4.sin_port   = 0;
 
-		getInetAddressBytes(env, addrInstance, 4, (jbyte *)&(AddrV4.sin_addr.s_addr));
+		getInetAddressBytes(env, addr_instance, 4, (jbyte *)&(AddrV4.sin_addr.s_addr));
 		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
@@ -718,28 +715,24 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		AddrV6.sin6_family = AF_INET6;
 		AddrV6.sin6_port   = 0;
 
-		getInetAddressBytes(env, addrInstance, 16, (jbyte *)&(AddrV6.sin6_addr.s6_addr));
+		getInetAddressBytes(env, addr_instance, 16, (jbyte *)&(AddrV6.sin6_addr.s6_addr));
 		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
 	}
 
-	// Remove local references that are no longer needed
-	(*env)->DeleteLocalRef(env, addrInstance);
-	addrInstance = NULL;
-
 	// Get the byte[] data from the DatagramPacket
 	// and then free up the local reference to the
 	// method id of the getData() method.
-	icmpDataArray = (*env)->CallObjectMethod(env, packet, dgramGetDataID);
-	if(icmpDataArray == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	icmp_byte_array = (*env)->CallObjectMethod(env, packet, dgram_get_data_method_id);
+	if(icmp_byte_array == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
 	// Get the length of the buffer so that
 	// a suitable 'char *' buffer can be allocated
 	// and used with the sendto() function.
-	bufferLen = (*env)->GetArrayLength(env, icmpDataArray);
+	bufferLen = (*env)->GetArrayLength(env, icmp_byte_array);
 	if(bufferLen <= 0) {
 		throwError(env, "java/io/IOException", "Insufficient data");
 		goto end_send;
@@ -760,14 +753,13 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// Copy the contents of the packet's byte[] array
 	// into the newly allocated buffer.
 	(*env)->GetByteArrayRegion(env,
-		icmpDataArray,
+		icmp_byte_array,
 		0,
 		bufferLen,
 		(jbyte *)outBuffer);
-	if((*env)->ExceptionOccurred(env) != NULL)
+	if((*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
-
-	(*env)->DeleteLocalRef(env, icmpDataArray);
+	}
 
 	// Check for 'OpenNMS!' at byte offset 32. If
 	// it's found then we need to modify the time
@@ -823,6 +815,16 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	}
 
 end_send:
+	if (dgram_class != NULL) {
+		(*env)->DeleteLocalRef(env, dgram_class);
+	}
+	if (addr_instance != NULL) {
+		(*env)->DeleteLocalRef(env, addr_instance);
+	}
+	if (icmp_byte_array != NULL) {
+		(*env)->DeleteLocalRef(env, icmp_byte_array);
+	}
+
 	if(outBuffer != NULL) {
 		free(outBuffer);
 	}
