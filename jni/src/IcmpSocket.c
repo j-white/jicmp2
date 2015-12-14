@@ -43,187 +43,107 @@
 #pragma export reset
 #endif
 
-/**
-* This routine is used to quickly compute the
-* checksum for a particular buffer. The checksum
-* is done with 16-bit quantities and padded with
-* zero if the buffer is not aligned on a 16-bit
-* boundry.
-*
-* FIXME: Add unit tests for this one.
-*/
-static unsigned short checksum(register unsigned short *p, register int sz) {
-	register unsigned long sum = 0;	// need a 32-bit quantity
-
-	// iterate over the 16-bit values and accumulate a sum.
-	while (sz > 1) {
-		sum += *p++;
-		sz  -= 2;
-	}
-
-	// handle the odd byte out
-	if (sz == 1) {
-		// cast the pointer to an unsigned char pointer,
-		// dereference and promote to an unsigned short.
-		// Shift in 8 zero bits and voila the value is padded!
-		sum += ((unsigned short) *((unsigned char *)p)) << 8;
-	}
-
-	// Add back the bits that may have overflowed the
-	// "16-bit" sum. First add high order 16 to low
-	// order 16, then repeat
-	while (sum >> 16) {
-		sum = (sum >> 16) + (sum & 0xffffUL);
-	}
-
-	sum = ~sum & 0xffffUL;
-	return (unsigned short)sum;
-}
+typedef struct {
+	sa_family_t family;
+	onms_socket fd;
+	uint16_t id;
+} icmpSocketAttributes;
 
 /**
- * Returns the socket family, i.e. AF_INET (IPv4) or AF_INET6 (IPv6)
- * to use for this ICMPSocket instance.
+ * Retrieves the attributes from the given ICMPSocket instance.
+ * Returns 0 on success.
  */
-static int getSocketFamily(JNIEnv *env, jobject instance) {
-    jclass  thisClass = NULL;
-    jfieldID thisIdField = NULL;
-    int socketFamily = AF_INET;
+static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, icmpSocketAttributes* state) {
+	int ret = -1;
 
-    // Find the class that describes ourself.
-    thisClass = (*env)->GetObjectClass(env, instance);
-    if(thisClass == NULL) {
-		goto end_getfamily;
+	jclass  icmpSocketClass = NULL;
+	jfieldID fieldId = NULL;
+
+	jclass	fdClass   = NULL;
+	jfieldID fdField = NULL;
+	jobject  fdInstance = NULL;
+
+	// Find the class that describes ourself.
+	icmpSocketClass = (*env)->GetObjectClass(env, instance);
+	if(icmpSocketClass == NULL) {
+		goto end_getstate;
 	}
 
-    // Grab a reference to the field that stores the id
-    thisIdField = (*env)->GetFieldID(env, thisClass, "m_useIPv6", "Z");
-    if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getfamily;
-	}
-
-    // Grab the value
-    jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, thisIdField);
-    if (using_ipv6 == JNI_TRUE) {
-        socketFamily = AF_INET6;
-    }
-
-end_getfamily:
-	// Cleanup
-	if (thisClass != NULL) {
-		(*env)->DeleteLocalRef(env, thisClass);
-	}
-
-    return socketFamily;
-}
-
-/**
-* Returns the unique pinger id of this ICMPSocket instance.
-* FIXME: Consolidate to return a struct with all of the instance specific details
-*/
-static int getPingerId(JNIEnv *env, jobject instance) {
-    jclass  thisClass = NULL;
-    jfieldID thisIdField = NULL;
-	int pingerId = 0;
-
-    // Find the class that describes ourself.
-	thisClass = (*env)->GetObjectClass(env, instance);
-	if(thisClass == NULL) {
-		goto end_getid;
-	}
-
-	// Grab a reference to the field that stores the id
-	thisIdField = (*env)->GetFieldID(env, thisClass, "m_pingerId", "I");
-	if(thisIdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getid;
+	// Grab a reference to the 'm_useIPv6' field
+	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_useIPv6", "Z");
+	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getstate;
 	}
 
 	// Grab the value
-	pingerId = (*env)->GetIntField(env, instance, thisIdField);
-
-end_getid:
-	// Cleanup
-	if (thisClass != NULL) {
-		(*env)->DeleteLocalRef(env, thisClass);
+	jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, fieldId);
+	if (using_ipv6 == JNI_TRUE) {
+		state->family = AF_INET6;
+	} else {
+		state->family = AF_INET;
 	}
 
-	return pingerId;
-}
-
-/**
-* This method is used to lookup the instances java.io.FileDescriptor
-* object and it's internal integer descriptor. This hidden integer
-* is used to store the opened ICMP socket handle that was
-* allocated by the operating system.
-*
-* If the descriptor could not be recovered or has not been
-* set then a INVALID_SOCKET is returned.
-*
-* FIXME: Consolidate to return a struct with all of the instance specific details
-*/
-static onms_socket getIcmpFd(JNIEnv *env, jobject instance) {
-	jclass	thisClass = NULL;
-	jclass	fdClass   = NULL;
-
-	jfieldID thisFdField    = NULL;
-	jobject  thisFdInstance = NULL;
-
-	jfieldID fdFdField = NULL;
-	onms_socket	fd_value  = INVALID_SOCKET;
-
-	// Find the class that describes ourself.
-	thisClass = (*env)->GetObjectClass(env, instance);
-	if (thisClass == NULL) {
-		goto end_getfd;
+	// Grab a reference to the 'm_pingerId' field
+	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_pingerId", "I");
+	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getstate;
 	}
+
+	// Grab the value
+	state->id = (*env)->GetIntField(env, instance, fieldId);
 
 	// Find the java.io.FileDescriptor class
-	thisFdField = (*env)->GetFieldID(env, thisClass, "m_rawFd", "Ljava/io/FileDescriptor;");
-	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getfd;
+	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_rawFd", "Ljava/io/FileDescriptor;");
+	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getstate;
 	}
 
 	// Get the instance of the FileDescriptor class from the instance of ourself
-	thisFdInstance = (*env)->GetObjectField(env, instance, thisFdField);
-	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getfd;
+	fdInstance = (*env)->GetObjectField(env, instance, fieldId);
+	if(fdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getstate;
 	}
 
 	// Get the class object for the java.io.FileDescriptor
-	fdClass = (*env)->GetObjectClass(env, thisFdInstance);
+	fdClass = (*env)->GetObjectClass(env, fdInstance);
 	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getfd;
+		goto end_getstate;
 	}
 
 	// Get the field identifier for the primitive integer
 	// that is part of the FileDescriptor class.
 #ifdef __WIN32__
-	fdFdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
+	fdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
 #else
-	fdFdField = (*env)->GetFieldID(env, fdClass, "fd", "I");
+	fdField = (*env)->GetFieldID(env, fdClass, "fd", "I");
 #endif
-	if (fdFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_getfd;
+	if (fdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_getstate;
 	}
 
 	// Recover the value
 #ifdef __WIN32__
-	fd_value = (SOCKET)(*env)->GetLongField(env, thisFdInstance, fdFdField);
+	state->fd = (SOCKET)(*env)->GetLongField(env, thisFdInstance, fdField);
 #else
-	fd_value = (*env)->GetIntField(env, thisFdInstance, fdFdField);
+	state->fd = (*env)->GetIntField(env, fdInstance, fdField);
 #endif
 
-end_getfd:
-	if (thisClass != NULL) {
-		(*env)->DeleteLocalRef(env, thisClass);
+	// We've successfully retrieved all of the attributes
+	ret = 0;
+
+end_getstate:
+	// Cleanup
+	if (icmpSocketClass != NULL) {
+		(*env)->DeleteLocalRef(env, icmpSocketClass);
 	}
 	if (fdClass != NULL) {
 		(*env)->DeleteLocalRef(env, fdClass);
 	}
-	if (thisFdInstance != NULL) {
-		(*env)->DeleteLocalRef(env, thisFdInstance);
+	if (fdInstance != NULL) {
+		(*env)->DeleteLocalRef(env, fdInstance);
 	}
 
-	return fd_value;
+	return ret;
 }
 
 static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value) {
@@ -235,7 +155,7 @@ static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value) {
 
 	jfieldID fdFdField = NULL;
 
-	// Find the class that describes ourself.
+	// Find the class that describes ourself
 	thisClass = (*env)->GetObjectClass(env, instance);
 	if(thisClass == NULL) {
 		goto end_setfd;
@@ -452,87 +372,77 @@ static void throwError(JNIEnv *env, char *exception, char *errorBuffer) {
 */
 JNIEXPORT void JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject instance) {
+	char errBuf[128];
 	struct protoent *proto;
-	onms_socket icmp_fd = INVALID_SOCKET;
 	int sock_type = SOCK_RAW;
 #ifdef __WIN32__
 	int result;
 	WSADATA info;
-
 	result = WSAStartup(MAKEWORD(2,2), &info);
-	if (result != 0)
-	{
-		char errBuf[128];
+	if (result != 0) {
 		sprintf(errBuf, "WSAStartup failed: %d", result);
 		throwError(env, "java/net/IOException", errBuf);
 		return;
 	}
 #endif
 
-    int protocol;
-    int family = getSocketFamily(env, instance);
-    if (family == AF_INET) {
-        protocol = IPPROTO_ICMP;
-    } else if (family == AF_INET6) {
-        protocol = IPPROTO_ICMPV6;
-    } else {
-        // TODO: Fail.
-    }
+	icmpSocketAttributes attr;
+	if (getIcmpSocketAttributes(env, instance, &attr)) {
+		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
+		return;
+	}
+
+	int protocol = attr.family == AF_INET ? IPPROTO_ICMP : IPPROTO_ICMPV6;
 
     // Attempt to use a diagram (UDP) socket
     int type = SOCK_DGRAM;
-    icmp_fd = socket(family, type, protocol);
-	if (icmp_fd == SOCKET_ERROR) {
-        // We weren't able to succesfully aquire the diagram socket, let's try a raw socket instead
+    attr.fd = socket(attr.family, type, protocol);
+	if (attr.fd == SOCKET_ERROR) {
+        // We weren't able to successfully acquire the diagram socket, let's try a raw socket instead
         type = SOCK_RAW;
-        icmp_fd = socket(family, type, protocol);
-        if (icmp_fd == SOCKET_ERROR) {
-		    char errBuf[128];
+		attr.fd = socket(attr.family, type, protocol);
+        if (attr.fd == SOCKET_ERROR) {
 		    int	savedErrno  = errno;
 		    snprintf(errBuf, sizeof(errBuf), "System error creating ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
 		    throwError(env, "java/net/SocketException", errBuf);
 		    return;
         }
+	} else {
+		// We've successfully acquired a diagram socket
+		// When using a diagram socket on Linux, the ID in the ICMP Echo Request header
+		// is replaced with the source port. In order to generate packets with the
+		// correct ID we need to bind the socket to this port.
+		struct sockaddr *sourceAddr;
+		size_t sourceAddrSize;
+
+		if (attr.family == AF_INET6) {
+			struct sockaddr_in6 source_address;
+			memset(&source_address, 0, sizeof(struct sockaddr_in6));
+			source_address.sin6_family = attr.family;
+			source_address.sin6_port = htons(attr.id);
+
+			sourceAddr = (struct sockaddr *)&source_address;
+			sourceAddrSize = sizeof(struct sockaddr_in6);
+		} else {
+			struct sockaddr_in source_address;
+			memset(&source_address, 0, sizeof(struct sockaddr_in));
+			source_address.sin_family = attr.family;
+			source_address.sin_port = htons(attr.id);
+
+			sourceAddr = (struct sockaddr *)&source_address;
+			sourceAddrSize = sizeof(struct sockaddr_in);
+		}
+
+		if(bind(attr.fd, sourceAddr, sourceAddrSize)) {
+			int	savedErrno  = errno;
+			snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMP socket (%d, %s)", savedErrno, strerror(savedErrno));
+			throwError(env, "java/net/SocketException", errBuf);
+			return;
+		}
 	}
 
-    if (type == SOCK_DGRAM) {
-        // When using a diagram socket on Linux, the ID in the ICMP Echo Request header
-        // is replaced with the source port. In order to generate packets with the
-        // correct ID we need to bind the socket to this port.
-        
-        int pingerId = getPingerId(env, instance);
-      
-        if (family == AF_INET6) {
-		    struct sockaddr_in6 source_address;
-		    memset(&source_address, 0, sizeof(struct sockaddr_in6));
-		    source_address.sin6_family = family;
-		    source_address.sin6_port = htons(pingerId);
-
-		    if(bind(icmp_fd, (struct sockaddr *)&source_address, sizeof(struct sockaddr_in6))) {
-		    	char errBuf[128];
-		    	int	savedErrno  = errno;
-		    	snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMPv6 socket (%d, %s)", savedErrno, strerror(savedErrno));
-		    	throwError(env, "java/net/SocketException", errBuf);
-		    	return;
-		    }
-        } else {
-		    struct sockaddr_in source_address;
-		    memset(&source_address, 0, sizeof(struct sockaddr_in));
-		    source_address.sin_family = family;
-		    source_address.sin_port = htons(pingerId);
-
-		    if(bind(icmp_fd, (struct sockaddr *)&source_address, sizeof(struct sockaddr_in))) {
-		    	char errBuf[128];
-		    	int	savedErrno  = errno;
-		    	snprintf(errBuf, sizeof(errBuf), "Failed to bind ICMPv4 socket (%d, %s)", savedErrno, strerror(savedErrno));
-		    	throwError(env, "java/net/SocketException", errBuf);
-		    	return;
-		    }
-        }
-    }
-
-	setIcmpFd(env, instance, icmp_fd);
-	return;
+	// Save the fd on the instance of the ICMPSocket
+	setIcmpFd(env, instance, attr.fd);
 }
 
 /*
@@ -560,15 +470,11 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	jobject			datagramInstance = NULL;
 	jclass			datagramClass 	= NULL;
 	jmethodID		datagramCtorID 	= NULL;
+	char errBuf[256];
 
-	int family = getSocketFamily(env, instance);
-
-	// Get the current descriptor's value
-	onms_socket fd_value = getIcmpFd(env, instance);
-	if((*env)->ExceptionOccurred(env) != NULL) {
-		goto end_recv;
-	} else if(fd_value < 0) {
-		throwError(env, "java/io/IOException", "Invalid Socket Descriptor");
+	icmpSocketAttributes attr;
+	if (getIcmpSocketAttributes(env, instance, &attr)) {
+		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		goto end_recv;
 	}
 
@@ -579,7 +485,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	// up the stack.
 	//FIXME: Is this really necessary?
 	inBuf = malloc(MAX_PACKET);
-	if(inBuf == NULL) {
+	if (inBuf == NULL) {
 		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram");
 		goto end_recv;
 	}
@@ -588,28 +494,24 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	// Clear out the address structures where the
 	// operating system will store the to/from address
 	// information.
-	if (family == AF_INET) {
+	if (attr.family == AF_INET) {
 		memset((void *)&inAddrV4, 0, sizeof(inAddrV4));
 		inAddrLen = sizeof(inAddrV4);
 		inAddr = (struct sockaddr *)&inAddrV4;
-	} else if (family == AF_INET6) {
+	} else {
 		memset((void *)&inAddrV6, 0, sizeof(inAddrV6));
 		inAddrLen = sizeof(inAddrV6);
 		inAddr = (struct sockaddr *)&inAddrV6;
-	} else {
-		// TODO: ERR
-		goto end_recv;
 	}
 
 	// Receive the data from the operating system. This
 	// will also include the IP header that precedes
 	// the ICMP data, we'll strip that off later.
-	iRC = (int)recvfrom(fd_value, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
+	iRC = (int)recvfrom(attr.fd, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
 	if(iRC == SOCKET_ERROR) {
 		// Error reading the information from the socket
-		char errBuf[256];
 		int savedErrno = errno;
-		snprintf(errBuf, sizeof(errBuf), "Error reading data from the socket descriptor (iRC = %d, fd_value = %d, %d, %s)", iRC, fd_value, savedErrno, strerror(savedErrno));
+		snprintf(errBuf, sizeof(errBuf), "Error reading data from the socket descriptor (iRC = %d, fd_value = %d, %d, %s)", iRC, attr.fd, savedErrno, strerror(savedErrno));
 		throwError(env, "java/io/IOException", errBuf);
 		goto end_recv;
 	} else if(iRC == 0) {
@@ -618,7 +520,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		goto end_recv;
 	}
 
-	if (family == AF_INET) {
+	if (attr.family == AF_INET) {
 		// update the length by removing the IP
 		// header from the message. Don't forget to decrement
 		// the bytes received by the size of the IP header.
@@ -689,7 +591,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
 		}
-	} else if (family == AF_INET6) {
+	} else {
 		icmp6Hdr = (struct icmp6_hdr *)((char *)inBuf);
 
 		// Check the ICMP header for type ECHO_REPLY, and
@@ -809,20 +711,9 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	struct sockaddr_in AddrV4;
 	struct sockaddr_in6 AddrV6;
 
-    int family = getSocketFamily(env, instance);
-
-	// Recover the operating system file descriptor
-	// so that we can use it in the sendto function.
-	onms_socket icmpfd = getIcmpFd(env, instance);
-
-	// Check for exception
-	if((*env)->ExceptionOccurred(env) != NULL) {
-		goto end_send;
-	}
-
-	// Check the descriptor
-	if(icmpfd < 0) {
-		throwError(env, "java/io/IOException", "Invalid file descriptor");
+	icmpSocketAttributes attr;
+	if (getIcmpSocketAttributes(env, instance, &attr)) {
+		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		goto end_send;
 	}
 
@@ -859,7 +750,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	size_t AddrLen;
 
 	// Set up the address
-	if (family == AF_INET) {
+	if (attr.family == AF_INET) {
 		Addr = (struct sockaddr*)&AddrV4;
 		AddrLen = sizeof(AddrV4);
 
@@ -870,7 +761,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
-	} else if (family == AF_INET6) {
+	} else {
 		Addr = (struct sockaddr*)&AddrV6;
 		AddrLen = sizeof(AddrV6);
 
@@ -932,7 +823,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// must equal 8 for ECHO_REQUEST
 	// Don't forget to check for a potential buffer overflow!
 	char shouldUpdate = 0;
-	if (family == AF_INET) {
+	if (attr.family == AF_INET) {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
 		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
@@ -941,7 +832,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 			// Checksum will be computed by system
 			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
 		}
-	} else if (family == AF_INET6) {
+	} else {
 		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((struct icmp6_hdr *)outBuffer)->icmp6_type == ICMP6_ECHO_REQUEST
 		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
@@ -963,7 +854,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
 	}
 
-	iRC = (int)sendto(icmpfd,
+	iRC = (int)sendto(attr.fd,
 					  (void *)outBuffer,
 					  (size_t)bufferLen,
 					  0,
@@ -993,9 +884,14 @@ end_send:
 JNIEXPORT void
 JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close
 		(JNIEnv *env, jobject instance) {
-	const onms_socket fd_value = getIcmpFd(env, instance);
-	if(fd_value >= 0 && (*env)->ExceptionOccurred(env) == NULL) {
-		close(fd_value);
+	icmpSocketAttributes attr;
+	if (getIcmpSocketAttributes(env, instance, &attr)) {
+		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
+		return;
+	}
+
+	if(attr.fd >= 0) {
+		close(attr.fd);
 		setIcmpFd(env, instance, INVALID_SOCKET);
 #ifdef __WIN32__
 		WSACleanup();
