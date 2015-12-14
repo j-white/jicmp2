@@ -47,36 +47,44 @@ typedef struct {
 	sa_family_t family;
 	onms_socket fd;
 	uint16_t id;
-} icmpSocketAttributes;
+} IcmpSocketAttributes;
+
+/**
+ * Utility class for throwing exceptions.
+ */
+static void throwError(JNIEnv *env, char *exception, char *error_msg) {
+	jclass exception_class = (*env)->FindClass(env, exception);
+	if (exception_class != NULL) {
+		(*env)->ThrowNew(env, exception_class, error_msg);
+	}
+}
 
 /**
  * Retrieves the attributes from the given ICMPSocket instance.
  * Returns 0 on success.
  */
-static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, icmpSocketAttributes* state) {
+static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, IcmpSocketAttributes* state) {
+	jclass icmp_socket_class = NULL;
+	jfieldID field_id = NULL;
+	jclass fd_class = NULL;
+	jfieldID fd_field = NULL;
+	jobject fd_instance = NULL;
 	int ret = -1;
 
-	jclass  icmpSocketClass = NULL;
-	jfieldID fieldId = NULL;
-
-	jclass	fdClass   = NULL;
-	jfieldID fdField = NULL;
-	jobject  fdInstance = NULL;
-
-	// Find the class that describes ourself.
-	icmpSocketClass = (*env)->GetObjectClass(env, instance);
-	if(icmpSocketClass == NULL) {
+	// Find the class that describes ourself
+	icmp_socket_class = (*env)->GetObjectClass(env, instance);
+	if (icmp_socket_class == NULL) {
 		goto end_getstate;
 	}
 
 	// Grab a reference to the 'm_useIPv6' field
-	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_useIPv6", "Z");
-	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	field_id = (*env)->GetFieldID(env, icmp_socket_class, "m_useIPv6", "Z");
+	if (field_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
 	// Grab the value
-	jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, fieldId);
+	jboolean using_ipv6 = (*env)->GetBooleanField(env, instance, field_id);
 	if (using_ipv6 == JNI_TRUE) {
 		state->family = AF_INET6;
 	} else {
@@ -84,40 +92,40 @@ static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, icmpSocketAttr
 	}
 
 	// Grab a reference to the 'm_pingerId' field
-	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_pingerId", "I");
-	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	field_id = (*env)->GetFieldID(env, icmp_socket_class, "m_pingerId", "I");
+	if (field_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
 	// Grab the value
-	state->id = (*env)->GetIntField(env, instance, fieldId);
+	state->id = (uint16_t)(*env)->GetIntField(env, instance, field_id);
 
 	// Find the java.io.FileDescriptor class
-	fieldId = (*env)->GetFieldID(env, icmpSocketClass, "m_rawFd", "Ljava/io/FileDescriptor;");
-	if(fieldId == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	field_id = (*env)->GetFieldID(env, icmp_socket_class, "m_rawFd", "Ljava/io/FileDescriptor;");
+	if (field_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
 	// Get the instance of the FileDescriptor class from the instance of ourself
-	fdInstance = (*env)->GetObjectField(env, instance, fieldId);
-	if(fdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	fd_instance = (*env)->GetObjectField(env, instance, field_id);
+	if (fd_instance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
 	// Get the class object for the java.io.FileDescriptor
-	fdClass = (*env)->GetObjectClass(env, fdInstance);
-	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	fd_class = (*env)->GetObjectClass(env, fd_instance);
+	if (fd_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
 	// Get the field identifier for the primitive integer
 	// that is part of the FileDescriptor class.
 #ifdef __WIN32__
-	fdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
+	fd_field = (*env)->GetFieldID(env, fd_class, "handle", "J");
 #else
-	fdField = (*env)->GetFieldID(env, fdClass, "fd", "I");
+	fd_field = (*env)->GetFieldID(env, fd_class, "fd", "I");
 #endif
-	if (fdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (fd_field == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_getstate;
 	}
 
@@ -125,7 +133,7 @@ static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, icmpSocketAttr
 #ifdef __WIN32__
 	state->fd = (SOCKET)(*env)->GetLongField(env, thisFdInstance, fdField);
 #else
-	state->fd = (*env)->GetIntField(env, fdInstance, fdField);
+	state->fd = (*env)->GetIntField(env, fd_instance, fd_field);
 #endif
 
 	// We've successfully retrieved all of the attributes
@@ -133,198 +141,148 @@ static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, icmpSocketAttr
 
 end_getstate:
 	// Cleanup
-	if (icmpSocketClass != NULL) {
-		(*env)->DeleteLocalRef(env, icmpSocketClass);
+	if (icmp_socket_class != NULL) {
+		(*env)->DeleteLocalRef(env, icmp_socket_class);
 	}
-	if (fdClass != NULL) {
-		(*env)->DeleteLocalRef(env, fdClass);
+	if (fd_class != NULL) {
+		(*env)->DeleteLocalRef(env, fd_class);
 	}
-	if (fdInstance != NULL) {
-		(*env)->DeleteLocalRef(env, fdInstance);
+	if (fd_instance != NULL) {
+		(*env)->DeleteLocalRef(env, fd_instance);
 	}
 
 	return ret;
 }
 
 static void setIcmpFd(JNIEnv *env, jobject instance, onms_socket fd_value) {
-	jclass	thisClass = NULL;
-	jclass	fdClass   = NULL;
-
-	jfieldID thisFdField    = NULL;
-	jobject  thisFdInstance = NULL;
-
-	jfieldID fdFdField = NULL;
+	jclass icmp_socket_class = NULL;
+	jclass fd_class = NULL;
+	jfieldID fd_field = NULL;
+	jobject fd_instance = NULL;
 
 	// Find the class that describes ourself
-	thisClass = (*env)->GetObjectClass(env, instance);
-	if(thisClass == NULL) {
+	icmp_socket_class = (*env)->GetObjectClass(env, instance);
+	if (icmp_socket_class == NULL) {
 		goto end_setfd;
 	}
 
 	// Find the java.io.FileDescriptor class
-	thisFdField = (*env)->GetFieldID(env, thisClass, "m_rawFd", "Ljava/io/FileDescriptor;");
-	if(thisFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	fd_field = (*env)->GetFieldID(env, icmp_socket_class, "m_rawFd", "Ljava/io/FileDescriptor;");
+	if (fd_field == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
 	}
 
 	// Get the instance of the FileDescriptor class from the instance of ourself
-	thisFdInstance = (*env)->GetObjectField(env, instance, thisFdField);
-	if(thisFdInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	fd_instance = (*env)->GetObjectField(env, instance, fd_field);
+	if (fd_instance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
 	}
 
 	// Get the class object for the java.io.FileDescriptor
-	fdClass = (*env)->GetObjectClass(env, thisFdInstance);
-	if(fdClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	fd_class = (*env)->GetObjectClass(env, fd_instance);
+	if (fd_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
 	}
 
 	// Get the field identifier for the primitive integer
 	// that is part of the FileDescriptor class.
 #ifdef __WIN32__
-	fdFdField = (*env)->GetFieldID(env, fdClass, "handle", "J");
+	fd_field = (*env)->GetFieldID(env, fd_class, "handle", "J");
 #else
-	fdFdField = (*env)->GetFieldID(env, fdClass, "fd", "I");
+	fd_field = (*env)->GetFieldID(env, fd_class, "fd", "I");
 #endif
-	if(fdFdField == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (fd_field == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_setfd;
 	}
 
 #ifdef __WIN32__
-	(*env)->SetLongField(env, thisFdInstance, fdFdField, fd_value);
+	(*env)->SetLongField(env, fd_instance, fd_field, fd_value);
 #else
-	(*env)->SetIntField(env, thisFdInstance, fdFdField, fd_value);
+	(*env)->SetIntField(env, fd_instance, fd_field, fd_value);
 #endif
-	(*env)->DeleteLocalRef(env, thisFdInstance);
 
 end_setfd:
-	if (thisClass != NULL) {
-		(*env)->DeleteLocalRef(env, thisClass);
+	if (icmp_socket_class != NULL) {
+		(*env)->DeleteLocalRef(env, icmp_socket_class);
 	}
-	if (fdClass != NULL) {
-		(*env)->DeleteLocalRef(env, fdClass);
+	if (fd_class != NULL) {
+		(*env)->DeleteLocalRef(env, fd_class);
+	}
+	if (fd_instance != NULL) {
+		(*env)->DeleteLocalRef(env, fd_instance);
 	}
 }
 
 static jobject newInetAddressFromBytes(JNIEnv *env, unsigned char* addr, u_int size) {
-	jclass addrClass;
-	jmethodID addrByAddressMethodID;
-	jobject addrInstance = NULL;
-	jbyteArray addrArray = NULL;
+	jclass addr_class;
+	jmethodID addr_by_address_method_id;
+	jobject new_addr_instance = NULL;
+	jbyteArray addr_bytes = NULL;
 
 	// Copy the address into a jbyteArray
-	addrArray = (*env)->NewByteArray(env, size);
-	if(addrArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
+	addr_bytes = (*env)->NewByteArray(env, size);
+	if (addr_bytes != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 		(*env)->SetByteArrayRegion(env,
-								   addrArray,
+								   addr_bytes,
 								   0,
 								   (jsize)size,
 								   (jbyte *)addr);
-	}
-	if ((*env)->ExceptionOccurred(env) != NULL) {
+	} else if ((*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
 	// Load the class
-	addrClass = (*env)->FindClass(env, "java/net/InetAddress");
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	addr_class = (*env)->FindClass(env, "java/net/InetAddress");
+	if (addr_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
 	// Find the static method
-	addrByAddressMethodID = (*env)->GetStaticMethodID(env,
-													  addrClass,
+	addr_by_address_method_id = (*env)->GetStaticMethodID(env,
+													  addr_class,
 													  "getByAddress",
 													  "([B)Ljava/net/InetAddress;");
-	if(addrByAddressMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (addr_by_address_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
 	// Invoke it!
-	addrInstance = (*env)->CallStaticObjectMethod(env,
-												  addrClass,
-												  addrByAddressMethodID,
-												  addrArray);
-	end_inet:
-	if(addrClass != NULL) {
-		(*env)->DeleteLocalRef(env, addrClass);
-	}
-	if(addrArray != NULL) {
-		(*env)->DeleteLocalRef(env, addrArray);
-	}
-	return addrInstance;
-}
-
-static in_addr_t getInetAddress(JNIEnv *env, jobject instance) {
-	jclass		addrClass = NULL;
-	jmethodID	addrArrayMethodID = NULL;
-	jbyteArray	addrData = NULL;
-	in_addr_t	retAddr = 0;
-
-	// Load the class
-	addrClass = (*env)->GetObjectClass(env, instance);
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_inet;
-	}
-
-	// Find the method
-	addrArrayMethodID = (*env)->GetMethodID(env,
-		addrClass,
-		"getAddress",
-		"()[B");
-	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_inet;
-	}
-
-	addrData = (*env)->CallObjectMethod(env,instance,addrArrayMethodID);
-	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_inet;
-	}
-
-	// The byte array returned from java.net.InetAddress.getAddress()
-	// (which was fetched above and is stored as a jbyteArray in addrData)
-	// is in network byte order (high byte first, AKA big endian).
-	// the value of in_addr_t is also in network byte order, so no
-	// conversion needs to be performed.
-	(*env)->GetByteArrayRegion(env,
-		addrData,
-		0,
-		4,
-		(jbyte *) &retAddr);
-
+	new_addr_instance = (*env)->CallStaticObjectMethod(env,
+												  addr_class,
+												  addr_by_address_method_id,
+												  addr_bytes);
 end_inet:
-	if (addrClass != NULL) {
-		(*env)->DeleteLocalRef(env, addrClass);
+	if (addr_class != NULL) {
+		(*env)->DeleteLocalRef(env, addr_class);
 	}
-	if (addrData != NULL) {
-		(*env)->DeleteLocalRef(env, addrData);
+	if (addr_bytes != NULL) {
+		(*env)->DeleteLocalRef(env, addr_bytes);
 	}
-
-	return retAddr;
+	return new_addr_instance;
 }
 
-static void getInet6Address(JNIEnv *env, jobject instance, unsigned char addr[]) {
-	jclass		addrClass = NULL;
-	jmethodID	addrArrayMethodID = NULL;
-	jbyteArray	addrData = NULL;
+static void getInetAddressBytes(JNIEnv *env, jobject inet_address_instance, jsize len, jbyte *buf) {
+	jclass addr_class = NULL;
+	jmethodID get_address_method_id = NULL;
+	jbyteArray addr_bytes = NULL;
 
 	// Load the class
-	addrClass = (*env)->GetObjectClass(env, instance);
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	addr_class = (*env)->GetObjectClass(env, inet_address_instance);
+	if (addr_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
 	// Find the method
-	addrArrayMethodID = (*env)->GetMethodID(env,
-											addrClass,
-											"getAddress",
-											"()[B");
-	if(addrArrayMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	get_address_method_id = (*env)->GetMethodID(env,
+												addr_class,
+												"getAddress",
+												"()[B");
+	if (get_address_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
-	addrData = (*env)->CallObjectMethod(env,instance,addrArrayMethodID);
-	if(addrData == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	addr_bytes = (*env)->CallObjectMethod(env, inet_address_instance, get_address_method_id);
+	if (addr_bytes == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_inet;
 	}
 
@@ -334,37 +292,28 @@ static void getInet6Address(JNIEnv *env, jobject instance, unsigned char addr[])
 	// the value of in_addr_t is also in network byte order, so no
 	// conversion needs to be performed.
 	(*env)->GetByteArrayRegion(env,
-							   addrData,
+							   addr_bytes,
 							   0,
-							   16,
-							   (jbyte *)addr);
+							   len,
+							   buf);
+
 end_inet:
-	if (addrClass != NULL) {
-		(*env)->DeleteLocalRef(env, addrClass);
+	if (addr_class != NULL) {
+		(*env)->DeleteLocalRef(env, addr_class);
 	}
-	if (addrData != NULL) {
-		(*env)->DeleteLocalRef(env, addrData);
-	}
-	return;
-}
-
-
-static void throwError(JNIEnv *env, char *exception, char *errorBuffer) {
-	jclass ioException = (*env)->FindClass(env, exception);
-	if (ioException != NULL) {
-		(*env)->ThrowNew(env, ioException, errorBuffer);
+	if (addr_bytes != NULL) {
+		(*env)->DeleteLocalRef(env, addr_bytes);
 	}
 }
 
 /*
-* Opens a new raw socket that is set to send
-* and receive the ICMP protocol. The protocol
-* for 'icmp' is looked up using the function
-* getprotobyname() and passed to the newly
-* constructed socket.
+* Opens a new socket that is set to send and receive the ICMP protocol.
 *
-* An exception is thrown if either of the
-* getprotobyname() or the socket() calls fail.
+* We first attempt to open a datagram socket, as these can be used
+* without any special privileges, and if this fails, we resort
+* to opening a raw socket.
+*
+* An exception is thrown if the socket() calls fail.
 *
 * Class:     org_opennms_protocols_icmp_ICMPSocket
 * Method:    initSocket
@@ -386,7 +335,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 	}
 #endif
 
-	icmpSocketAttributes attr;
+	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		return;
@@ -472,7 +421,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	jmethodID		datagramCtorID 	= NULL;
 	char errBuf[256];
 
-	icmpSocketAttributes attr;
+	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		goto end_recv;
@@ -711,7 +660,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	struct sockaddr_in AddrV4;
 	struct sockaddr_in6 AddrV6;
 
-	icmpSocketAttributes attr;
+	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		goto end_send;
@@ -757,7 +706,8 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		memset(&AddrV4, 0, AddrLen);
 		AddrV4.sin_family = AF_INET;
 		AddrV4.sin_port   = 0;
-		AddrV4.sin_addr.s_addr = getInetAddress(env, addrInstance);
+
+		getInetAddressBytes(env, addrInstance, 4, (jbyte *)&(AddrV4.sin_addr.s_addr));
 		if((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
@@ -769,7 +719,10 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		AddrV6.sin6_family = AF_INET6;
 		AddrV6.sin6_port   = 0;
 
-		getInet6Address(env, addrInstance, AddrV6.sin6_addr.s6_addr);
+		getInetAddressBytes(env, addrInstance, 16, (jbyte *)&(AddrV6.sin6_addr.s6_addr));
+		if((*env)->ExceptionOccurred(env) != NULL) {
+			goto end_send;
+		}
 	}
 
 	// Remove local references that are no longer needed
@@ -884,7 +837,7 @@ end_send:
 JNIEXPORT void
 JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close
 		(JNIEnv *env, jobject instance) {
-	icmpSocketAttributes attr;
+	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
 		return;
