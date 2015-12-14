@@ -286,73 +286,19 @@ end_setfd:
 	}
 }
 
-static jobject newInetAddress(JNIEnv *env, in_addr_t addr) {
-	char 		buf[16];
-	jclass		addrClass;
-	jmethodID	addrByNameMethodID;
-	jobject 	addrInstance = NULL;
-	jstring		addrString = NULL;
-
-	snprintf(buf, sizeof(buf),
-		"%d.%d.%d.%d",
-		((unsigned char *) &addr)[0],
-		((unsigned char *) &addr)[1],
-		((unsigned char *) &addr)[2],
-		((unsigned char *) &addr)[3]);
-
-	// Create the string
-	addrString = (*env)->NewStringUTF(env, (const char *)buf);
-	if(addrString == NULL || (*env)->ExceptionOccurred(env)) {
-		goto end_inet;
-	}
-
-	// Load the class
-	addrClass = (*env)->FindClass(env, "java/net/InetAddress");
-	if(addrClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_inet;
-	}
-
-	// Find the static method
-	// FIXME: We should use getByAddress insetad of getByName. See newInetAddressV6.
-	addrByNameMethodID = (*env)->GetStaticMethodID(env,
-		addrClass,
-		"getByName",
-		"(Ljava/lang/String;)Ljava/net/InetAddress;");
-	if(addrByNameMethodID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_inet;
-	}
-
-	// Invoke it!
-	addrInstance = (*env)->CallStaticObjectMethod(env,
-		addrClass,
-		addrByNameMethodID,
-		addrString);
-
-end_inet:
-	if (addrClass != NULL) {
-		(*env)->DeleteLocalRef(env, addrClass);
-	}
-	if (addrString != NULL) {
-		(*env)->DeleteLocalRef(env, addrString);
-	}
-
-	return addrInstance;
-}
-
-
-static jobject newInetAddressV6(JNIEnv *env, unsigned char addr[]) {
+static jobject newInetAddressFromBytes(JNIEnv *env, unsigned char* addr, u_int size) {
 	jclass addrClass;
 	jmethodID addrByAddressMethodID;
 	jobject addrInstance = NULL;
 	jbyteArray addrArray = NULL;
 
 	// Copy the address into a jbyteArray
-	addrArray = (*env)->NewByteArray(env, 16);
+	addrArray = (*env)->NewByteArray(env, size);
 	if(addrArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 		(*env)->SetByteArrayRegion(env,
 								   addrArray,
 								   0,
-								   (jsize)16,
+								   (jsize)size,
 								   (jbyte *)addr);
 	}
 	if ((*env)->ExceptionOccurred(env) != NULL) {
@@ -379,7 +325,7 @@ static jobject newInetAddressV6(JNIEnv *env, unsigned char addr[]) {
 												  addrClass,
 												  addrByAddressMethodID,
 												  addrArray);
-end_inet:
+	end_inet:
 	if(addrClass != NULL) {
 		(*env)->DeleteLocalRef(env, addrClass);
 	}
@@ -388,7 +334,6 @@ end_inet:
 	}
 	return addrInstance;
 }
-
 
 static in_addr_t getInetAddress(JNIEnv *env, jobject instance) {
 	jclass		addrClass = NULL;
@@ -727,7 +672,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		// Now construct a new java.net.InetAddress object from
 		// the receipt information. The network address must
 		// be passed in network byte order!
-		addrInstance = newInetAddress(env, inAddrV4.sin_addr.s_addr);
+		addrInstance = newInetAddressFromBytes(env, (unsigned char*)&inAddrV4.sin_addr.s_addr, 4);
 		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
 		}
@@ -784,7 +729,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		// Now construct a new java.net.InetAddress object from
 		// the receipt information. The network address must
 		// be passed in network byte order!
-		addrInstance = newInetAddressV6(env, inAddrV6.sin6_addr.s6_addr);
+		addrInstance = newInetAddressFromBytes(env, inAddrV6.sin6_addr.s6_addr, 16);
 		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 			goto end_recv;
 		}
@@ -803,9 +748,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		}
 	}
 
-	/**
-	* get the datagram class
-	*/
+	// Get the Datagram class
 	datagramClass = (*env)->FindClass(env, "java/net/DatagramPacket");
 	if(datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
@@ -1016,7 +959,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 			now = htonll(now);
 			memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
 
-			/* checksum will be computed by system */
+			// Checksum will be computed by system
 			((struct icmp6_hdr *)outBuffer)->icmp6_cksum = 0;
 
 		}
