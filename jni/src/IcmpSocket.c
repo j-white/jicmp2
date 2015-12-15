@@ -421,11 +421,11 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	u_int source_addr_size = 0;
 	void *icmp_pkt_bytes = NULL;
 
-	jbyteArray		byteArray 	= NULL;
-	jobject			addrInstance 	= NULL;
-	jobject			datagram_instance = NULL;
-	jclass			datagramClass 	= NULL;
-	jmethodID		datagramCtorID 	= NULL;
+	jbyteArray byte_array = NULL;
+	jobject addr_instance = NULL;
+	jobject	datagram_instance = NULL;
+	jclass datagram_class = NULL;
+	jmethodID datagram_ctor_method_id = NULL;
 
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
@@ -438,6 +438,8 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	// want to lose messages if we don't need to. This also
 	// must be dynamic for MT-Safe reasons and avoids blowing
 	// up the stack.
+	// FIXME: Is there a way to pass this buffer from the Java code and avoid creating
+	// another byte array bellow
 	buffer = malloc(MAX_PACKET);
 	if (buffer == NULL) {
 		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram");
@@ -524,8 +526,9 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		uint64_t sent;
 		uint64_t diff;
 
-		// Get the current time in microseconds and then
-		// compute the difference
+		// Get the current time in microseconds and then compute the difference
+		// FIXME: This should be passed as an auxilary object instead of jamming it
+		// in the ICMP data. This would also allow us to send out smaller packets
 		CURRENTTIMEMICROS(now);
 		memcpy((char *)&sent, icmp_pkt_bytes + SENTTIME_OFFSET, TIME_LENGTH);
 		sent = ntohll(sent);
@@ -551,16 +554,16 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	// Now construct a new java.net.InetAddress object from
 	// the receipt information. The network address must
 	// be passed in network byte order!
-	addrInstance = newInetAddressFromBytes(env, source_addr_bytes, source_addr_size);
-	if (addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	addr_instance = newInetAddressFromBytes(env, source_addr_bytes, source_addr_size);
+	if (addr_instance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
 	// Get the byte array needed to setup the datagram constructor.
-	byteArray = (*env)->NewByteArray(env, (jsize)ret);
-	if (byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
+	byte_array = (*env)->NewByteArray(env, (jsize)ret);
+	if (byte_array != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 		(*env)->SetByteArrayRegion(env,
-								   byteArray,
+								   byte_array,
 								   0,
 								   (jsize)ret,
 								   (jbyte *)icmp_pkt_bytes);
@@ -571,38 +574,38 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	}
 
 	// Get the Datagram class
-	datagramClass = (*env)->FindClass(env, "java/net/DatagramPacket");
-	if (datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	datagram_class = (*env)->FindClass(env, "java/net/DatagramPacket");
+	if (datagram_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
 	// Datagram constructor identifier
-	datagramCtorID = (*env)->GetMethodID(env,
-		datagramClass,
-		"<init>",
-		"([BILjava/net/InetAddress;I)V");
-	if (datagramCtorID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	datagram_ctor_method_id = (*env)->GetMethodID(env,
+												  datagram_class,
+												  "<init>",
+												  "([BILjava/net/InetAddress;I)V");
+	if (datagram_ctor_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
 	// New one!
 	datagram_instance = (*env)->NewObject(env,
-		datagramClass,
-		datagramCtorID,
-		byteArray,
-		(jint)ret,
-		addrInstance,
-		(jint)0);
+										  datagram_class,
+										  datagram_ctor_method_id,
+										  byte_array,
+										  (jint)ret,
+										  addr_instance,
+										  (jint)0);
 
 end_recv:
-	if (addrInstance != NULL) {
-		(*env)->DeleteLocalRef(env, addrInstance);
+	if (addr_instance != NULL) {
+		(*env)->DeleteLocalRef(env, addr_instance);
 	}
-	if (byteArray != NULL) {
-		(*env)->DeleteLocalRef(env, byteArray);
+	if (byte_array != NULL) {
+		(*env)->DeleteLocalRef(env, byte_array);
 	}
-	if (datagramClass != NULL) {
-		(*env)->DeleteLocalRef(env, datagramClass);
+	if (datagram_class != NULL) {
+		(*env)->DeleteLocalRef(env, datagram_class);
 	}
 	if (buffer != NULL) {
 		free(buffer);
@@ -618,18 +621,23 @@ end_recv:
 */
 JNIEXPORT void JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet) {
+	int ret;
+	void *buffer = NULL;
+	jsize buffer_len = 0;
+	struct sockaddr *in_addr;
+	onms_socklen_t in_addr_len;
+
+	char exception_msg[256];
+	char error_msg[128];
+
+	struct sockaddr_in in_addr_v4;
+	struct sockaddr_in6 in_addr_v6;
+
 	jclass dgram_class = NULL;
 	jmethodID dgram_get_data_method_id = NULL;
 	jmethodID dgram_get_addr_method_id = NULL;
 	jobject addr_instance = NULL;
 	jbyteArray icmp_byte_array = NULL;
-
-	char *outBuffer = NULL;
-	jsize bufferLen = 0;
-	int iRC;
-
-	struct sockaddr_in AddrV4;
-	struct sockaddr_in6 AddrV6;
 
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
@@ -663,32 +671,29 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 		goto end_send;
 	}
 
-	struct sockaddr * Addr;
-	size_t AddrLen;
-
 	// Set up the address
 	if (attr.family == AF_INET) {
-		Addr = (struct sockaddr*)&AddrV4;
-		AddrLen = sizeof(AddrV4);
+		in_addr = (struct sockaddr*)&in_addr_v4;
+		in_addr_len = sizeof(in_addr_v4);
 
-		memset(&AddrV4, 0, AddrLen);
-		AddrV4.sin_family = AF_INET;
-		AddrV4.sin_port   = 0;
+		memset(&in_addr_v4, 0, in_addr_len);
+		in_addr_v4.sin_family = AF_INET;
+		in_addr_v4.sin_port   = 0;
 
-		getInetAddressBytes(env, addr_instance, 4, (jbyte *)&(AddrV4.sin_addr.s_addr));
-		if((*env)->ExceptionOccurred(env) != NULL) {
+		getInetAddressBytes(env, addr_instance, 4, (jbyte *)&(in_addr_v4.sin_addr.s_addr));
+		if ((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
 	} else {
-		Addr = (struct sockaddr*)&AddrV6;
-		AddrLen = sizeof(AddrV6);
+		in_addr = (struct sockaddr*)&in_addr_v6;
+		in_addr_len = sizeof(in_addr_v6);
 
-		memset(&AddrV6, 0, AddrLen);
-		AddrV6.sin6_family = AF_INET6;
-		AddrV6.sin6_port   = 0;
+		memset(&in_addr_v6, 0, in_addr_len);
+		in_addr_v6.sin6_family = AF_INET6;
+		in_addr_v6.sin6_port   = 0;
 
-		getInetAddressBytes(env, addr_instance, 16, (jbyte *)&(AddrV6.sin6_addr.s6_addr));
-		if((*env)->ExceptionOccurred(env) != NULL) {
+		getInetAddressBytes(env, addr_instance, 16, (jbyte *)&(in_addr_v6.sin6_addr.s6_addr));
+		if ((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
 	}
@@ -697,39 +702,37 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// and then free up the local reference to the
 	// method id of the getData() method.
 	icmp_byte_array = (*env)->CallObjectMethod(env, packet, dgram_get_data_method_id);
-	if(icmp_byte_array == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (icmp_byte_array == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
 	// Get the length of the buffer so that
 	// a suitable 'char *' buffer can be allocated
 	// and used with the sendto() function.
-	bufferLen = (*env)->GetArrayLength(env, icmp_byte_array);
-	if(bufferLen <= 0) {
+	buffer_len = (*env)->GetArrayLength(env, icmp_byte_array);
+	if (buffer_len <= 0) {
 		throwError(env, "java/io/IOException", "Insufficient data");
 		goto end_send;
 	}
 
 	// Allocate the buffer where the java byte[] information
 	// is to be transfered to.
-	outBuffer = malloc((size_t)bufferLen);
-	if(outBuffer == NULL) {
-		char buf[128]; /// error condition: java.lang.OutOfMemoryError!
-		int serror = errno;
-		snprintf(buf, sizeof(buf), "Insufficent Memory (%d, %s)", serror, strerror(serror));
-
-		throwError(env, "java/lang/OutOfMemoryError", buf);
-		goto end_send;
+	buffer = malloc((size_t)buffer_len);
+	if (buffer == NULL) {
+		int	saved_errno = errno;
+		strerror_r(saved_errno, error_msg, sizeof(error_msg));
+		snprintf(exception_msg, sizeof(exception_msg), "Insufficent Memory (%d, %s)", saved_errno, error_msg);
+		throwError(env, "java/lang/OutOfMemoryError", exception_msg);
 	}
 
 	// Copy the contents of the packet's byte[] array
 	// into the newly allocated buffer.
 	(*env)->GetByteArrayRegion(env,
-		icmp_byte_array,
-		0,
-		bufferLen,
-		(jbyte *)outBuffer);
-	if((*env)->ExceptionOccurred(env) != NULL) {
+							   icmp_byte_array,
+							   0,
+							   buffer_len,
+							   (jbyte *)buffer);
+	if ((*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
@@ -738,52 +741,52 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// and checksum for transmission. ICMP type
 	// must equal 8 for ECHO_REQUEST
 	// Don't forget to check for a potential buffer overflow!
-	char shouldUpdate = 0;
+	char shouldUpdatePayload = 0;
 	if (attr.family == AF_INET) {
-		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		   && ((icmphdr_t *)outBuffer)->ICMP_TYPE == 0x08
-		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			shouldUpdate = 1;
+		if(buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && ((icmphdr_t *)buffer)->ICMP_TYPE == 0x08
+		   && memcmp((char *)buffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
+			shouldUpdatePayload = 1;
 
 			// Checksum will be computed by system
-			((icmphdr_t *)outBuffer)->ICMP_CHECKSUM = 0;
+			((icmphdr_t *)buffer)->ICMP_CHECKSUM = 0;
 		}
 	} else {
-		if(bufferLen >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		   && ((struct icmp6_hdr *)outBuffer)->icmp6_type == ICMP6_ECHO_REQUEST
-		   && memcmp((char *)outBuffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			shouldUpdate = 1;
+		if(buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && ((struct icmp6_hdr *)buffer)->icmp6_type == ICMP6_ECHO_REQUEST
+		   && memcmp((char *)buffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
+			shouldUpdatePayload = 1;
 
 			// Checksum will be computed by system
-			((struct icmp6_hdr *)outBuffer)->icmp6_cksum = 0;
+			((struct icmp6_hdr *)buffer)->icmp6_cksum = 0;
 		}
 	}
 
-	if (shouldUpdate) {
+	if (shouldUpdatePayload) {
 		uint64_t now = 0;
 
-		memcpy((char *)outBuffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-		memcpy((char *)outBuffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
+		memcpy((char *)buffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+		memcpy((char *)buffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
 
 		CURRENTTIMEMICROS(now);
 		now = htonll(now);
-		memcpy((char *)outBuffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
+		memcpy((char *)buffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);
 	}
 
-	iRC = (int)sendto(attr.fd,
-					  (void *)outBuffer,
-					  (size_t)bufferLen,
+	ret = (int)sendto(attr.fd,
+					  buffer,
+					  (size_t)buffer_len,
 					  0,
-					  Addr,
-					  AddrLen);
+					  in_addr,
+					  in_addr_len);
 
-	if(iRC == SOCKET_ERROR && errno == EACCES) {
+	if (ret == SOCKET_ERROR && errno == EACCES) {
 		throwError(env, "java/net/NoRouteToHostException", "cannot send to broadcast address");
-	} else if(iRC != bufferLen) {
-		char buf[128];
-		int serror = errno;
-		snprintf(buf, sizeof(buf), "sendto error (%d, %s)", serror, strerror(serror));
-		throwError(env, "java/io/IOException", buf);
+	} else if(ret != buffer_len) {
+		int	saved_errno = errno;
+		strerror_r(saved_errno, error_msg, sizeof(error_msg));
+		snprintf(exception_msg, sizeof(exception_msg), "sendto error (%d, %s)", saved_errno, error_msg);
+		throwError(env, "java/io/IOException", exception_msg);
 	}
 
 end_send:
@@ -796,9 +799,8 @@ end_send:
 	if (icmp_byte_array != NULL) {
 		(*env)->DeleteLocalRef(env, icmp_byte_array);
 	}
-
-	if(outBuffer != NULL) {
-		free(outBuffer);
+	if(buffer != NULL) {
+		free(buffer);
 	}
 }
 
