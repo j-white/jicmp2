@@ -400,25 +400,32 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 */
 JNIEXPORT jobject JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instance) {
-	int			iRC;
-	void *			inBuf = NULL;
+	int ret;
+	void *buffer = NULL;
+	struct sockaddr *in_addr;
+	onms_socklen_t in_addr_len;
 
-	onms_socklen_t		inAddrLen;
-	struct sockaddr*    inAddr;
-	struct sockaddr_in	inAddrV4;
+	char exception_msg[256];
+	char error_msg[128];
 
-	iphdr_t *		ip4Hdr = NULL;
-	icmphdr_t *		icmp4Hdr = NULL;
+	// IPv4 specific structures
+	struct sockaddr_in in_addr_v4;
+	iphdr_t *ip_hdr_v4 = NULL;
+	icmphdr_t *icmp_hdr_v4 = NULL;
 
-	struct sockaddr_in6	inAddrV6;
-	struct icmp6_hdr *	icmp6Hdr = NULL;
+	// IPv6 specific structures
+	struct sockaddr_in6	in_addr_v6;
+	struct icmp6_hdr *icmp_hdr_v6 = NULL;
+
+	unsigned char *source_addr_bytes = NULL;
+	u_int source_addr_size = 0;
+	void *icmp_pkt_bytes = NULL;
 
 	jbyteArray		byteArray 	= NULL;
 	jobject			addrInstance 	= NULL;
-	jobject			datagramInstance = NULL;
+	jobject			datagram_instance = NULL;
 	jclass			datagramClass 	= NULL;
 	jmethodID		datagramCtorID 	= NULL;
-	char errBuf[256];
 
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
@@ -431,176 +438,141 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 	// want to lose messages if we don't need to. This also
 	// must be dynamic for MT-Safe reasons and avoids blowing
 	// up the stack.
-	//FIXME: Is this really necessary?
-	inBuf = malloc(MAX_PACKET);
-	if (inBuf == NULL) {
+	buffer = malloc(MAX_PACKET);
+	if (buffer == NULL) {
 		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram");
 		goto end_recv;
 	}
-	memset(inBuf, 0, MAX_PACKET);
+	memset(buffer, 0, MAX_PACKET);
 
 	// Clear out the address structures where the
 	// operating system will store the to/from address
 	// information.
 	if (attr.family == AF_INET) {
-		memset((void *)&inAddrV4, 0, sizeof(inAddrV4));
-		inAddrLen = sizeof(inAddrV4);
-		inAddr = (struct sockaddr *)&inAddrV4;
+		memset((void *)&in_addr_v4, 0, sizeof(in_addr_v4));
+		in_addr_len = sizeof(in_addr_v4);
+		in_addr = (struct sockaddr *)&in_addr_v4;
 	} else {
-		memset((void *)&inAddrV6, 0, sizeof(inAddrV6));
-		inAddrLen = sizeof(inAddrV6);
-		inAddr = (struct sockaddr *)&inAddrV6;
+		memset((void *)&in_addr_v6, 0, sizeof(in_addr_v6));
+		in_addr_len = sizeof(in_addr_v6);
+		in_addr = (struct sockaddr *)&in_addr_v6;
 	}
 
-	// Receive the data from the operating system. This
-	// will also include the IP header that precedes
-	// the ICMP data, we'll strip that off later.
-	iRC = (int)recvfrom(attr.fd, inBuf, MAX_PACKET, 0, inAddr, &inAddrLen);
-	if(iRC == SOCKET_ERROR) {
+	// Receive data from the socket:
+	// IPv4 packets will also include the IP header preceding the ICMP data
+	// IPv6 packets do NOT include the IP header
+	ret = (int)recvfrom(attr.fd, buffer, MAX_PACKET, 0, in_addr, &in_addr_len);
+	if (ret == SOCKET_ERROR) {
 		// Error reading the information from the socket
-		int savedErrno = errno;
-		snprintf(errBuf, sizeof(errBuf), "Error reading data from the socket descriptor (iRC = %d, fd_value = %d, %d, %s)", iRC, attr.fd, savedErrno, strerror(savedErrno));
-		throwError(env, "java/io/IOException", errBuf);
+		int saved_errno = errno;
+		strerror_r(saved_errno, error_msg, sizeof(error_msg));
+		snprintf(exception_msg, sizeof(exception_msg), "Error reading data from the socket descriptor (iRC = %d, fd_value = %d, %d, %s)", ret, attr.fd, saved_errno, error_msg);
+		throwError(env, "java/io/IOException", exception_msg);
 		goto end_recv;
-	} else if(iRC == 0) {
+	} else if (ret == 0) {
 		// Error reading the information from the socket
 		throwError(env, "java/io/EOFException", "End-of-File returned from socket descriptor");
 		goto end_recv;
 	}
 
+	char updateRecvTime = 0;
+
 	if (attr.family == AF_INET) {
-		// update the length by removing the IP
-		// header from the message. Don't forget to decrement
-		// the bytes received by the size of the IP header.
+		// We need to remove the IP header from the message.
+		// We also decrement the bytes received by the same size.
 		//
 		// NOTE: The ip_hl field of the IP header is the number
 		// of 4 byte values in the header. Thus the ip_hl must
 		// be multiplied by 4 (or shifted 2 bits).
-		ip4Hdr = (iphdr_t *)inBuf;
-		iRC -= ip4Hdr->ONMS_IP_HL << 2;
-		if(iRC <= 0) {
+		ip_hdr_v4 = (iphdr_t *) buffer;
+		ret -= ip_hdr_v4->ONMS_IP_HL << 2;
+		if (ret <= 0) {
 			throwError(env, "java/io/IOException", "Malformed ICMP datagram received");
 			goto end_recv;
 		}
-		icmp4Hdr = (icmphdr_t *)((char *)inBuf + (ip4Hdr->ONMS_IP_HL << 2));
+		icmp_hdr_v4 = (icmphdr_t *) ((char *) buffer + (ip_hdr_v4->ONMS_IP_HL << 2));
 
 		// Check the ICMP header for type equal 0, which is ECHO_REPLY, and
-		// then check the payload for the 'OpenNMS!' marker. If it's one
-		//  we sent out then fix the recv time!
-		//
-		// Don't forget to check for a buffer overflow!
-		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		   && icmp4Hdr->ICMP_TYPE == 0
-		   && memcmp((char *)icmp4Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			uint64_t now;
-			uint64_t sent;
-			uint64_t diff;
-
-			// Get the current time in microseconds and then
-			// compute the difference
-			CURRENTTIMEMICROS(now);
-			memcpy((char *)&sent, (char *)icmp4Hdr + SENTTIME_OFFSET, TIME_LENGTH);
-			sent = ntohll(sent);
-			diff = now - sent;
-
-			// Now fill in the sent, received, and diff
-			sent = MICROS_TO_MILLIS(sent);
-			sent = htonll(sent);
-			memcpy((char *)icmp4Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
-
-			now  = MICROS_TO_MILLIS(now);
-			now  = htonll(now);
-			memcpy((char *)icmp4Hdr + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-
-			diff = htonll(diff);
-			memcpy((char *)icmp4Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
-
-			// No need to recompute checksum on this on
-			// since we don't actually check it upon receipt
+		// then check the payload for the 'OpenNMS!' marker.
+		if (ret >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+			&& icmp_hdr_v4->ICMP_TYPE == 0
+			&& memcmp((char *) icmp_hdr_v4 + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
+			updateRecvTime = 1;
 		}
 
-		// Now construct a new java.net.InetAddress object from
-		// the receipt information. The network address must
-		// be passed in network byte order!
-		addrInstance = newInetAddressFromBytes(env, (unsigned char*)&inAddrV4.sin_addr.s_addr, 4);
-		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-			goto end_recv;
-		}
-
-		// Get the byte array needed to setup the datagram constructor.
-		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
-		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
-			(*env)->SetByteArrayRegion(env,
-									   byteArray,
-									   0,
-									   (jsize)iRC,
-									   (jbyte *)icmp4Hdr);
-		}
-		if((*env)->ExceptionOccurred(env) != NULL) {
-			goto end_recv;
-		}
+		source_addr_bytes = (unsigned char*)&in_addr_v4.sin_addr.s_addr;
+		source_addr_size = 4;
+		icmp_pkt_bytes = icmp_hdr_v4;
 	} else {
-		icmp6Hdr = (struct icmp6_hdr *)((char *)inBuf);
+		icmp_hdr_v6 = (struct icmp6_hdr *)((char *)buffer);
 
 		// Check the ICMP header for type ECHO_REPLY, and
-		// then check the payload for the 'OpenNMS!' marker. If it's one
-		// we sent out then fix the recv time!
-		//
-		// Don't forget to check for a buffer overflow!
-		if(iRC >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		   && icmp6Hdr->icmp6_type == ICMP6_ECHO_REPLY
-		   && memcmp((char *)icmp6Hdr + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			uint64_t now;
-			uint64_t sent;
-			uint64_t diff;
-
-			// Get the current time in microseconds and then compute the difference
-			CURRENTTIMEMICROS(now);
-			memcpy((char *)&sent, (char *)icmp6Hdr + SENTTIME_OFFSET, TIME_LENGTH);
-			sent = ntohll(sent);
-			diff = now - sent;
-
-			// Now fill in the sent, received, and diff
-			sent = MICROS_TO_MILLIS(sent);
-			sent = htonll(sent);
-			memcpy((char *)icmp6Hdr + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
-
-			now  = MICROS_TO_MILLIS(now);
-			now  = htonll(now);
-			memcpy((char *)icmp6Hdr + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-
-			diff = htonll(diff);
-			memcpy((char *)icmp6Hdr + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
-
-			// No need to recompute checksum on this on
-			// since we don't actually check it upon receipt
+		// then check the payload for the 'OpenNMS!' marker.
+		if(ret >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		   && icmp_hdr_v6->icmp6_type == ICMP6_ECHO_REPLY
+		   && memcmp((char *)icmp_hdr_v6 + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
+			updateRecvTime = 1;
 		}
 
-		// Now construct a new java.net.InetAddress object from
-		// the receipt information. The network address must
-		// be passed in network byte order!
-		addrInstance = newInetAddressFromBytes(env, inAddrV6.sin6_addr.s6_addr, 16);
-		if(addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-			goto end_recv;
-		}
+		source_addr_bytes = in_addr_v6.sin6_addr.s6_addr;
+		source_addr_size = 16;
+		icmp_pkt_bytes = icmp_hdr_v6;
+	}
 
-		// Get the byte array needed to setup the datagram constructor.
-		byteArray = (*env)->NewByteArray(env, (jsize)iRC);
-		if(byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
-			(*env)->SetByteArrayRegion(env,
-									   byteArray,
-									   0,
-									   (jsize)iRC,
-									   (jbyte *)icmp6Hdr);
-		}
-		if((*env)->ExceptionOccurred(env) != NULL) {
-			goto end_recv;
-		}
+	if (updateRecvTime) {
+		uint64_t now;
+		uint64_t sent;
+		uint64_t diff;
+
+		// Get the current time in microseconds and then
+		// compute the difference
+		CURRENTTIMEMICROS(now);
+		memcpy((char *)&sent, icmp_pkt_bytes + SENTTIME_OFFSET, TIME_LENGTH);
+		sent = ntohll(sent);
+		diff = now - sent;
+
+		// Now fill in the sent, received, and diff
+		sent = MICROS_TO_MILLIS(sent);
+		sent = htonll(sent);
+		memcpy(icmp_pkt_bytes + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
+
+		now  = MICROS_TO_MILLIS(now);
+		now  = htonll(now);
+		memcpy(icmp_pkt_bytes + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
+
+		diff = htonll(diff);
+		memcpy(icmp_pkt_bytes + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
+
+		// FIXME: Maybe we should be verifying the checksum before we alter the packet, or is that handled for us?
+		// No need to recompute checksum on this on
+		// since we don't actually check it upon receipt
+	}
+
+	// Now construct a new java.net.InetAddress object from
+	// the receipt information. The network address must
+	// be passed in network byte order!
+	addrInstance = newInetAddressFromBytes(env, source_addr_bytes, source_addr_size);
+	if (addrInstance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+		goto end_recv;
+	}
+
+	// Get the byte array needed to setup the datagram constructor.
+	byteArray = (*env)->NewByteArray(env, (jsize)ret);
+	if (byteArray != NULL && (*env)->ExceptionOccurred(env) == NULL) {
+		(*env)->SetByteArrayRegion(env,
+								   byteArray,
+								   0,
+								   (jsize)ret,
+								   (jbyte *)icmp_pkt_bytes);
+	}
+
+	if ((*env)->ExceptionOccurred(env) != NULL) {
+		goto end_recv;
 	}
 
 	// Get the Datagram class
 	datagramClass = (*env)->FindClass(env, "java/net/DatagramPacket");
-	if(datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (datagramClass == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
@@ -609,16 +581,16 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instanc
 		datagramClass,
 		"<init>",
 		"([BILjava/net/InetAddress;I)V");
-	if(datagramCtorID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	if (datagramCtorID == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
 	// New one!
-	datagramInstance = (*env)->NewObject(env,
+	datagram_instance = (*env)->NewObject(env,
 		datagramClass,
 		datagramCtorID,
 		byteArray,
-		(jint)iRC,
+		(jint)ret,
 		addrInstance,
 		(jint)0);
 
@@ -632,11 +604,11 @@ end_recv:
 	if (datagramClass != NULL) {
 		(*env)->DeleteLocalRef(env, datagramClass);
 	}
-	if(inBuf != NULL) {
-		free(inBuf);
+	if (buffer != NULL) {
+		free(buffer);
 	}
 
-	return datagramInstance;
+	return datagram_instance;
 }
 
 /*
