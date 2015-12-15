@@ -743,7 +743,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 	// Don't forget to check for a potential buffer overflow!
 	char shouldUpdatePayload = 0;
 	if (attr.family == AF_INET) {
-		if(buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		if (buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((icmphdr_t *)buffer)->ICMP_TYPE == 0x08
 		   && memcmp((char *)buffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			shouldUpdatePayload = 1;
@@ -752,7 +752,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 			((icmphdr_t *)buffer)->ICMP_CHECKSUM = 0;
 		}
 	} else {
-		if(buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
+		if (buffer_len >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
 		   && ((struct icmp6_hdr *)buffer)->icmp6_type == ICMP6_ECHO_REQUEST
 		   && memcmp((char *)buffer + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
 			shouldUpdatePayload = 1;
@@ -782,7 +782,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, 
 
 	if (ret == SOCKET_ERROR && errno == EACCES) {
 		throwError(env, "java/net/NoRouteToHostException", "cannot send to broadcast address");
-	} else if(ret != buffer_len) {
+	} else if (ret != buffer_len) {
 		int	saved_errno = errno;
 		strerror_r(saved_errno, error_msg, sizeof(error_msg));
 		snprintf(exception_msg, sizeof(exception_msg), "sendto error (%d, %s)", saved_errno, error_msg);
@@ -799,7 +799,7 @@ end_send:
 	if (icmp_byte_array != NULL) {
 		(*env)->DeleteLocalRef(env, icmp_byte_array);
 	}
-	if(buffer != NULL) {
+	if (buffer != NULL) {
 		free(buffer);
 	}
 }
@@ -818,7 +818,7 @@ JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close
 		return;
 	}
 
-	if(attr.fd >= 0) {
+	if (attr.fd >= 0) {
 		close(attr.fd);
 		setIcmpFd(env, instance, INVALID_SOCKET);
 #ifdef __WIN32__
