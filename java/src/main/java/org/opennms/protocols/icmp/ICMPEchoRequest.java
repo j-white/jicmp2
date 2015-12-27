@@ -28,23 +28,15 @@
 
 package org.opennms.protocols.icmp;
 
-import java.net.DatagramPacket;
+import java.net.InetAddress;
 
 /**
- * Used to represent ICMPv4 and ICMPv6 Echo Requests and Echo Replies.
+ * Used to represent ICMPv4 and ICMPv6 Echo Requests.
  *
  * @author jwhite
  */
-public interface ICMPEchoPacket {
+public interface ICMPEchoRequest extends ICMPEchoPacket {
 
-    public int getPacketSize();
-
-    public DatagramPacket toDatagram();
-
-    public long getThreadId();
-
-    public short getIdentity();
-
-    public short getSequenceId();
+    public InetAddress getDestination();
 
 }

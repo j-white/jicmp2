@@ -40,8 +40,7 @@ package org.opennms.protocols.icmp4;
 
 import java.util.Date;
 import java.util.Random;
-
-import org.opennms.protocols.ipv4.OC16ChecksumProducer;
+import static org.opennms.protocols.icmp.PacketUtils.byteToShort;
 
 /**
  * This class defines Internet Control Message Protocol header. The header
@@ -52,7 +51,7 @@ import org.opennms.protocols.ipv4.OC16ChecksumProducer;
  * @author Brian Weaver
  * @version 0.1
  */
-public class ICMPv4Header extends Object {
+public class ICMPv4Packet {
     public static final byte TYPE_ECHO_REPLY = (byte) 0;
 
     public static final byte TYPE_DESTINATION_UNREACHABLE = (byte) 3;
@@ -144,7 +143,6 @@ public class ICMPv4Header extends Object {
     /**
      * Used to generate the sequence numbers for the class. This number is
      * generated application wide.
-     * 
      */
     private static short sm_seq = 0;
 
@@ -168,41 +166,9 @@ public class ICMPv4Header extends Object {
     }
 
     /**
-     * Converts a byte to a short.
-     * 
-     * @param b
-     *            The byte to convert.
-     * 
-     * @return The converted byte.
-     * 
-     */
-    protected static short byteToShort(byte b) {
-        short s = (short) b;
-        if (s < 0)
-            s += 256;
-        return s;
-    }
-
-    /**
-     * Converts a byte to an integer.
-     * 
-     * @param b
-     *            The byte to convert.
-     * 
-     * @return The converted byte.
-     * 
-     */
-    protected static int byteToInt(byte b) {
-        int i = (int) b;
-        if (i < 0)
-            i += 256;
-        return i;
-    }
-
-    /**
      * Initializes the header to a default value.
      */
-    public ICMPv4Header() {
+    public ICMPv4Packet() {
         m_type = 0;
         m_code = 0;
         m_checksum = 0;
@@ -215,9 +181,8 @@ public class ICMPv4Header extends Object {
      * 
      * @param type
      *            The header type.
-     * 
      */
-    public ICMPv4Header(byte type) {
+    public ICMPv4Packet(byte type) {
         this();
         m_type = type;
     }
@@ -229,9 +194,8 @@ public class ICMPv4Header extends Object {
      *            The type value for the header
      * @param code
      *            The code value for the header
-     * 
      */
-    public ICMPv4Header(byte type, byte code) {
+    public ICMPv4Packet(byte type, byte code) {
         this(type);
         m_code = code;
     }
@@ -249,9 +213,8 @@ public class ICMPv4Header extends Object {
      *            The 16-bit identity (user).
      * @param sequence
      *            The 16-bit sequence id.
-     * 
      */
-    public ICMPv4Header(byte type, byte code, short checksum, short identity, short sequence) {
+    public ICMPv4Packet(byte type, byte code, short checksum, short identity, short sequence) {
         m_type = type;
         m_code = code;
         m_checksum = checksum;
@@ -265,9 +228,8 @@ public class ICMPv4Header extends Object {
      * 
      * @param second
      *            The object to duplicate.
-     * 
      */
-    public ICMPv4Header(ICMPv4Header second) {
+    public ICMPv4Packet(ICMPv4Packet second) {
         m_type = second.m_type;
         m_code = second.m_code;
         m_checksum = second.m_checksum;
@@ -298,7 +260,7 @@ public class ICMPv4Header extends Object {
      *                header.
      * 
      */
-    public ICMPv4Header(byte[] data, int offset) {
+    public ICMPv4Packet(byte[] data, int offset) {
         if ((data.length - offset) < getNetworkSize())
             throw new IndexOutOfBoundsException("Insufficient number of bytes available to construct the ICMP header");
 
@@ -314,7 +276,7 @@ public class ICMPv4Header extends Object {
      * 
      * @return The ICMP type.
      */
-    public final byte getType() {
+    public final byte getTypeCode() {
         return m_type;
     }
 
@@ -389,7 +351,7 @@ public class ICMPv4Header extends Object {
      * @return The 16-bit identity.
      * 
      */
-    public final short getIdentity() {
+    public short getIdentity() {
         return m_ident;
     }
 

@@ -1,63 +1,45 @@
-//
-// This file is part of the OpenNMS(R) Application.
-//
-// OpenNMS(R) is Copyright (C) 2002-2003 The OpenNMS Group, Inc.  All rights reserved.
-// OpenNMS(R) is a derivative work, containing both original code, included code and modified
-// code that was published under the GNU General Public License. Copyrights for modified 
-// and included code are below.
-//
-// OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
-//
-// Modifications:
-//
-// 2003 Mar 05: Cleaned up some ICMP related code.
-// 2003 Jan 31: Cleaned up some unused imports. 
-// 2002 Nov 13: Added response time stats for ICMP requests.
-// 
-// Original code base Copyright (C) 1999-2001 Oculan Corp.  All rights reserved.
-//
-// This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.                                                            
-//
-// You should have received a copy of the GNU General Public License
-// along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-//       
-// For more information contact: 
-//      OpenNMS Licensing       <license@opennms.org>
-//      http://www.opennms.org/
-//      http://www.opennms.com/
-//
-// Tab Size = 8
-//
+/*******************************************************************************
+ * This file is part of OpenNMS(R).
+ *
+ * Copyright (C) 2015 The OpenNMS Group, Inc.
+ * OpenNMS(R) is Copyright (C) 1999-2015 The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License,
+ * or (at your option) any later version.
+ *
+ * OpenNMS(R) is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with OpenNMS(R).  If not, see:
+ *      http://www.gnu.org/licenses/
+ *
+ * For more information contact:
+ *     OpenNMS(R) Licensing <license@opennms.org>
+ *     http://www.opennms.org/
+ *     http://www.opennms.com/
+ *******************************************************************************/
 
 package org.opennms.protocols.icmp4;
 
 import java.net.DatagramPacket;
-import java.net.InetAddress;
 
 import org.opennms.protocols.icmp.ICMPEchoPacket;
-import org.opennms.protocols.ipv4.OC16ChecksumProducer;
+import org.opennms.protocols.icmp.PacketUtils;
 
 /**
- * The ping packet for discovery
  * 
+ * @author jwhite
  * @author Brian Weaver
  * @author Sowmya
- * @author <a href="http://www.opennms.org/">OpenNMS</a>
  */
-public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPacket {
-    /**
-     * Unique named padding that is placed in front of the incremental padding.
-     */
-    private static final byte NAMED_PAD[] = { (byte) 'O', (byte) 'p', (byte) 'e', (byte) 'n', (byte) 'N', (byte) 'M', (byte) 'S', (byte) '!' };
+public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
 
     /**
      * Timestamp when packet was sent
@@ -141,7 +123,7 @@ public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPack
      * @see java.lang.System#currentTimeMillis
      */
     public ICMPv4EchoPacket(long tid, int packetsize) {
-        super(ICMPv4Header.TYPE_ECHO_REQUEST, (byte) 0);
+        super(ICMPv4Packet.TYPE_ECHO_REQUEST, (byte) 0);
         setNextSequenceId();
 
         m_rtt = 0;
@@ -154,9 +136,9 @@ public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPack
         }
         
         m_pad = new byte[packetsize - getMinimumNetworkSize()];
-        for (int x = 0; x < NAMED_PAD.length && x < m_pad.length; x++)
-            m_pad[x] = NAMED_PAD[x];
-        for (int x = NAMED_PAD.length; x < m_pad.length; x++)
+        for (int x = 0; x < PacketUtils.NAMED_PAD.length && x < m_pad.length; x++)
+            m_pad[x] = PacketUtils.NAMED_PAD[x];
+        for (int x = PacketUtils.NAMED_PAD.length; x < m_pad.length; x++)
             m_pad[x] = (byte) 0;
 
     }
@@ -252,19 +234,10 @@ public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPack
      * Returns the size of the integer headers in the packet plus the required 'OpenNMS!' string.
      */
     public int getMinimumNetworkSize() {
-        return (getDataSize() + NAMED_PAD.length);
+        return (getDataSize() + PacketUtils.NAMED_PAD.length);
     }
-    
-    /**
-     * Useless function with variable packet sizes but preserved for backwards compatability
-     * @return
-     */
-    @Deprecated
-    public static final int getNetworkSize() {
-    	return ICMPv4Header.getNetworkSize() + 32 + 16;
-    }
-    
-    
+
+    @Override
     public int getPacketSize() {
     	return getDataSize() + m_pad.length;
     }
@@ -438,7 +411,6 @@ public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPack
      * 
      * @return The object as an array of bytes.
      */
-    @Override
     public byte[] toBytes() {
         byte[] buf = new byte[getPacketSize()];
         storeToBuffer(buf, 0);
@@ -446,9 +418,13 @@ public final class ICMPv4EchoPacket extends ICMPv4Header implements ICMPEchoPack
     }
 
     @Override
-    public DatagramPacket toDatagram(InetAddress target) {
+    public DatagramPacket toDatagram() {
         final byte[] requestData = toBytes();
-        return new DatagramPacket(requestData, requestData.length, target, 0);
+        return new DatagramPacket(requestData, requestData.length, null, 0);
     }
 
-} // end Packet.
+    @Override
+    public long getThreadId() {
+        return m_tid;
+    }
+}

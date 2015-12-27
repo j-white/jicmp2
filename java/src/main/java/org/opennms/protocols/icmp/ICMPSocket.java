@@ -1,23 +1,52 @@
+/*******************************************************************************
+ * This file is part of OpenNMS(R).
+ *
+ * Copyright (C) 2016 The OpenNMS Group, Inc.
+ * OpenNMS(R) is Copyright (C) 1999-2016 The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License,
+ * or (at your option) any later version.
+ *
+ * OpenNMS(R) is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with OpenNMS(R).  If not, see:
+ *      http://www.gnu.org/licenses/
+ *
+ * For more information contact:
+ *     OpenNMS(R) Licensing <license@opennms.org>
+ *     http://www.opennms.org/
+ *     http://www.opennms.com/
+ *******************************************************************************/
+
 package org.opennms.protocols.icmp;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 
-import org.opennms.protocols.icmp4.ICMPv4EchoPacket;
-import org.opennms.protocols.icmp6.ICMPv6EchoRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ICMPSocket implements AutoCloseable {
+/**
+ * Native interface used to support both ICMPv4 and ICMPv6 sockets.
+ */
+public abstract class ICMPSocket implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(ICMPSocket.class);
     
     private static final String LIBRARY_NAME = "jicmp2";
     private static final String PROPERTY_NAME = "opennms.library.jicmp2";
-    private static final String LOGGER_PROPERTY_NAME = "opennms.logger.jicmp";
-    
+
     /**
      * This instance is used by the native code to save and store file
      * descriptor information about the icmp socket. This needs to be
@@ -45,13 +74,15 @@ public class ICMPSocket implements AutoCloseable {
     public ICMPSocket(int pingerId, boolean useIPv6) throws IOException {
         String property = System.getProperty(PROPERTY_NAME);
         if (property != null) {
-            LOG.debug("System property '" + PROPERTY_NAME + "' set to '" + System.getProperty(PROPERTY_NAME) + ".  Attempting to load " + LIBRARY_NAME + " library from this location.");
+            LOG.debug("System property '{}' set to '{}'  Attempting to load {} library from this location.",
+                    PROPERTY_NAME, property, LIBRARY_NAME);
             System.load(property);
         } else {
-            LOG.debug("System property '" + PROPERTY_NAME + "' not set.  Attempting to load library using System.loadLibrary(\"" + LIBRARY_NAME + "\").");
+            LOG.debug("System property '{}' not set.  Attempting to load library using System.loadLibrary(\"{}\").",
+                    PROPERTY_NAME, LIBRARY_NAME);
             System.loadLibrary(LIBRARY_NAME);
         }
-        LOG.info("Successfully loaded " + LIBRARY_NAME + " library.");
+        LOG.info("Successfully loaded {} library.", LIBRARY_NAME);
 
         m_pingerId = pingerId;
         m_useIPv6 = useIPv6;
@@ -61,20 +92,20 @@ public class ICMPSocket implements AutoCloseable {
         String osName = System.getProperty("os.name");
         if (osName != null && osName.toLowerCase().startsWith("windows")) {
             // Windows complains if you receive before sending a packet
-            ICMPEchoPacket p;
-            InetAddress addr;
-            if (m_useIPv6) {
-                addr = InetAddress.getByName("::1");
-                p = new ICMPv6EchoRequest(1, 1, 1);
-            } else {
-                addr = InetAddress.getByName("127.0.0.1");
-                ICMPv4EchoPacket v4p = new ICMPv4EchoPacket(0);
-                v4p.setIdentity((short) 0);
-                v4p.computeChecksum();
-                p = v4p;
-            }
-	        send(p.toDatagram(addr));
+	        send(new ICMPEchoRequestBuilder(getLocalhost()).build());
         }
+    }
+
+    public abstract InetAddress getLocalhost() throws UnknownHostException;
+
+    public abstract ICMPEchoReply buildEchoReply(DatagramPacket packet);
+
+    public void send(ICMPEchoRequest request) throws IOException {
+        sendPacket(request.toDatagram());
+    }
+
+    public ICMPEchoReply receive() throws IOException {
+        return buildEchoReply(receivePacket());
     }
 
     /**
@@ -84,7 +115,7 @@ public class ICMPSocket implements AutoCloseable {
      * @throws java.io.IOException
      *             This is thrown if an error occurs opening the ICMP socket.
      */
-    private native void initSocket() throws IOException;
+    private final native void initSocket() throws IOException;
 
     /**
      * This method is used to send the passed datagram using the ICMP transport.
@@ -98,7 +129,7 @@ public class ICMPSocket implements AutoCloseable {
      * @exception java.net.NoRouteToHostException
      *                Thrown if the destination address is a broadcast address.
      */
-    public final native void send(DatagramPacket packet) throws IOException;
+    private final native void sendPacket(DatagramPacket request) throws IOException;
 
     /**
      * This method is used to receive the next ICMP datagram from the operating
@@ -110,7 +141,7 @@ public class ICMPSocket implements AutoCloseable {
      *                Thrown if an error occurs reading the next ICMP message.
      * 
      */
-    public final native DatagramPacket receive() throws IOException;
+    private final native DatagramPacket receivePacket() throws IOException;
 
     /**
      * This method is used to close and release the resources associated with the

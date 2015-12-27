@@ -1,0 +1,3 @@
+* Checksum handling
+** Try sending invalid checksum
+** Verify checksum on receipt, handled by kernel?

@@ -32,7 +32,7 @@
 // Tab Size = 8
 //
 
-package org.opennms.protocols.ipv4;
+package org.opennms.protocols.icmp4;
 
 /**
  * Produces a one's compliment 16-bit checksum from data that is "added" to the

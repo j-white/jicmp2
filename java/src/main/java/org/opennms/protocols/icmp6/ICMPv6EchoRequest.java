@@ -29,19 +29,19 @@
  */
 package org.opennms.protocols.icmp6;
 
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 
-
+import org.opennms.protocols.icmp.ICMPEchoRequest;
 
 /**
  * ICMPEchoRequest
  *
  * @author brozow
  */
-public class ICMPv6EchoRequest extends ICMPv6EchoPacket {
-    
+public class ICMPv6EchoRequest extends ICMPv6EchoPacket implements ICMPEchoRequest {
+ 
     public static final int PACKET_LENGTH = 64;
-
 
     public ICMPv6EchoRequest() {
         super(64);
@@ -49,17 +49,15 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket {
         setCode(0);
     }
 
-
     public ICMPv6EchoRequest(int size) {
         super(size);
         setType(Type.EchoRequest);
         setCode(0);
     }
 
-
     public ICMPv6EchoRequest(int id, int seqNum, long threadId) {
         this();
-        
+
         setIdentifier(id);
         setSequenceNumber(seqNum);
         
@@ -73,9 +71,7 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket {
         for(int b = DATA_LENGTH; b < buf.limit(); b++) {
             buf.put(b, (byte)b);
         }
-
     }
-    
 
     public ICMPv6EchoRequest(int id, int seqNum, long threadId, int size) {
         this(size);
@@ -93,8 +89,11 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket {
         for(int b = DATA_LENGTH; b < buf.limit(); b++) {
             buf.put(b, (byte)b);
         }
-
     }
-    
 
+    @Override
+    public InetAddress getDestination() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

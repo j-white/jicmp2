@@ -92,11 +92,12 @@ public class ICMPv6Packet {
         this(ByteBuffer.allocate(size));
     }
     
-    public int getPacketLength() {
+    public int getPacketSize() {
         return m_packetData.limit();
     }
     
-    public Type getType() {
+    
+    public Type getAType() {
         return Type.toType(m_packetData.get(HEADER_OFFSET_TYPE));
     }
     
@@ -125,11 +126,6 @@ public class ICMPv6Packet {
         } finally {
             payload.position(oldPos);
         }
-    }
-
-    public int makeUnsignedShort(byte b1, byte b0) {
-        return 0xffff & (((b1 & 0xff) << 8) | 
-                         ((b0 & 0xff) << 0));
     }
 
     public int getUnsignedShort(int index) {

@@ -395,11 +395,11 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 
 /*
 * Class:     org_opennms_protocols_icmp_ICMPSocket
-* Method:    receive
+* Method:    receivePacket
 * Signature: ()Ljava/net/DatagramPacket;
 */
 JNIEXPORT jobject JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_receive (JNIEnv *env, jobject instance) {
+Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject instance) {
 	int ret;
 	void *buffer = NULL;
 	struct sockaddr *in_addr;
@@ -616,11 +616,11 @@ end_recv:
 
 /*
 * Class:     org_opennms_protocols_icmp_ICMPSocket
-* Method:    send
+* Method:    sendPacket
 * Signature: (Ljava/net/DatagramPacket;)V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_send (JNIEnv *env, jobject instance, jobject packet) {
+Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject instance, jobject packet) {
 	int ret;
 	void *buffer = NULL;
 	jsize buffer_len = 0;

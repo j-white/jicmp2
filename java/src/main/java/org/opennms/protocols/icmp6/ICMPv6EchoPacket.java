@@ -30,7 +30,6 @@
 package org.opennms.protocols.icmp6;
 
 import java.net.DatagramPacket;
-import java.net.InetAddress;
 import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoPacket;
@@ -74,7 +73,11 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
         content.position(HEADER_LENGTH);
         m_dataBuffer = content.slice();
     }
-    
+
+    public ICMPv6EchoPacket(byte[] bytes) {
+        this(new ICMPv6Packet(bytes, 0, bytes.length));
+    }
+
     public ByteBuffer getDataBuffer() {
         return m_dataBuffer;
     }
@@ -112,6 +115,7 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
         getDataBuffer().putLong(DATA_OFFSET_RECVTIME, recvTime);
     }
 
+    @Override
     public long getThreadId() {
         return getDataBuffer().getLong(DATA_OFFSET_THREAD_ID);
     }
@@ -136,8 +140,18 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
     }
 
     @Override
-    public DatagramPacket toDatagram(InetAddress target) {
+    public DatagramPacket toDatagram() {
         final byte[] requestData = toBytes();
-        return new DatagramPacket(requestData, requestData.length, target, 0);
+        return new DatagramPacket(requestData, requestData.length, null, 0);
+    }
+
+    @Override
+    public short getIdentity() {
+        return (short)getIdentifier();
+    }
+
+    @Override
+    public short getSequenceId() {
+        return (short)getSequenceNumber();
     }
 }

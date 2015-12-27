@@ -28,23 +28,32 @@
 
 package org.opennms.protocols.icmp;
 
-import java.net.DatagramPacket;
-
 /**
- * Used to represent ICMPv4 and ICMPv6 Echo Requests and Echo Replies.
+ * Constants and utilities for manipulating the packet bytes.
  *
  * @author jwhite
  */
-public interface ICMPEchoPacket {
+public class PacketUtils {
 
-    public int getPacketSize();
+    /**
+     * Unique named padding that is placed in front of the incremental padding.
+     */
+    public static final byte NAMED_PAD[] = { (byte) 'O', (byte) 'p', (byte) 'e', (byte) 'n', (byte) 'N', (byte) 'M', (byte) 'S', (byte) '!' };
 
-    public DatagramPacket toDatagram();
 
-    public long getThreadId();
-
-    public short getIdentity();
-
-    public short getSequenceId();
-
+    /**
+     * Converts a byte to a short.
+     * 
+     * @param b
+     *            The byte to convert.
+     * 
+     * @return The converted byte.
+     * 
+     */
+    public static short byteToShort(byte b) {
+        short s = (short) b;
+        if (s < 0)
+            s += 256;
+        return s;
+    }
 }

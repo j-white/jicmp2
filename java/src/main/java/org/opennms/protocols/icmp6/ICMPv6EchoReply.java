@@ -1,24 +1,32 @@
 package org.opennms.protocols.icmp6;
 
-import java.nio.ByteBuffer;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
 
-public class ICMPv6EchoReply extends ICMPv6EchoPacket {
-    
-    public ICMPv6EchoReply(ICMPv6Packet icmpPacket) {
-        super(icmpPacket);
-    }
-    
-    public ByteBuffer getContentBuffer() {
-        return getDataBuffer();
+import org.opennms.protocols.icmp.ICMPEchoReply;
+
+public class ICMPv6EchoReply extends ICMPv6EchoPacket implements ICMPEchoReply {
+
+    public ICMPv6EchoReply(int size) {
+        super(size);
+        // TODO Auto-generated constructor stub
     }
 
-    public boolean isValid() {
-        ByteBuffer content = getContentBuffer();
-        return content.limit() >= DATA_LENGTH && COOKIE == getCookie();
+    public ICMPv6EchoReply(DatagramPacket packet) {
+        super(0);
+        // TODO Auto-generated constructor stub
     }
-    
-    public boolean isEchoReply() {
-        return Type.EchoReply.equals(getType());
+
+    @Override
+    public InetAddress getSource() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public long getReceivedTime() {
+        // TODO Auto-generated method stub
+        return 0;
     }
 
 }
