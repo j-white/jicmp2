@@ -34,4 +34,3 @@ On Debian 7.0, the environment can be setup with:
 apt-get install openjdk-7-jdk build-essential cmake make pkg-config
 export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
 ```
-

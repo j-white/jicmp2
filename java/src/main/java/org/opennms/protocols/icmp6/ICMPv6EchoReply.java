@@ -7,26 +7,20 @@ import org.opennms.protocols.icmp.ICMPEchoReply;
 
 public class ICMPv6EchoReply extends ICMPv6EchoPacket implements ICMPEchoReply {
 
-    public ICMPv6EchoReply(int size) {
-        super(size);
-        // TODO Auto-generated constructor stub
-    }
+    private final InetAddress m_source;
 
     public ICMPv6EchoReply(DatagramPacket packet) {
-        super(64);
-        // TODO Auto-generated constructor stub
+        super(packet.getData());
+        m_source = packet.getAddress();
     }
 
     @Override
     public InetAddress getSource() {
-        // TODO Auto-generated method stub
-        return null;
+        return m_source;
     }
 
     @Override
     public long getReceivedTime() {
-        // TODO Auto-generated method stub
-        return 0;
+        return this.getReceiveTime();
     }
-
 }

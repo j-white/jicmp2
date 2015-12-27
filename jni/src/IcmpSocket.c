@@ -620,7 +620,7 @@ end_recv:
 * Signature: (Ljava/net/DatagramPacket;)V
 */
 JNIEXPORT void JNICALL
-Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject instance, jobject packet) {
+Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject instance, jobject destination, jbyteArray data) {
 	int ret;
 	void *buffer = NULL;
 	jsize buffer_len = 0;
@@ -633,41 +633,9 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 	struct sockaddr_in in_addr_v4;
 	struct sockaddr_in6 in_addr_v6;
 
-	jclass dgram_class = NULL;
-	jmethodID dgram_get_data_method_id = NULL;
-	jmethodID dgram_get_addr_method_id = NULL;
-	jobject addr_instance = NULL;
-	jbyteArray icmp_byte_array = NULL;
-
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
 		throwError(env, "java/lang/Exception", "Failed to retrieve ICMP socket attributes.");
-		goto end_send;
-	}
-
-	// Get the DatagramPacket class information
-	dgram_class = (*env)->GetObjectClass(env, packet);
-	if (dgram_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_send;
-	}
-
-	// Get the identifiers for the getData() and getAddress()
-	// methods that are part of the DatagramPacket class.
-	dgram_get_data_method_id = (*env)->GetMethodID(env, dgram_class, "getData", "()[B");
-	if (dgram_get_data_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_send;
-	}
-
-	dgram_get_addr_method_id = (*env)->GetMethodID(env, dgram_class, "getAddress", "()Ljava/net/InetAddress;");
-	if (dgram_get_addr_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_send;
-	}
-
-	// Get the address information from the DatagramPacket
-	// so that a useable Operating System address can
-	// be constructed.
-	addr_instance = (*env)->CallObjectMethod(env, packet, dgram_get_addr_method_id);
-	if (addr_instance == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_send;
 	}
 
@@ -680,7 +648,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 		in_addr_v4.sin_family = AF_INET;
 		in_addr_v4.sin_port   = 0;
 
-		getInetAddressBytes(env, addr_instance, 4, (jbyte *)&(in_addr_v4.sin_addr.s_addr));
+		getInetAddressBytes(env, destination, 4, (jbyte *)&(in_addr_v4.sin_addr.s_addr));
 		if ((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
@@ -692,24 +660,16 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 		in_addr_v6.sin6_family = AF_INET6;
 		in_addr_v6.sin6_port   = 0;
 
-		getInetAddressBytes(env, addr_instance, 16, (jbyte *)&(in_addr_v6.sin6_addr.s6_addr));
+		getInetAddressBytes(env, destination, 16, (jbyte *)&(in_addr_v6.sin6_addr.s6_addr));
 		if ((*env)->ExceptionOccurred(env) != NULL) {
 			goto end_send;
 		}
 	}
 
-	// Get the byte[] data from the DatagramPacket
-	// and then free up the local reference to the
-	// method id of the getData() method.
-	icmp_byte_array = (*env)->CallObjectMethod(env, packet, dgram_get_data_method_id);
-	if (icmp_byte_array == NULL || (*env)->ExceptionOccurred(env) != NULL) {
-		goto end_send;
-	}
-
 	// Get the length of the buffer so that
 	// a suitable 'char *' buffer can be allocated
 	// and used with the sendto() function.
-	buffer_len = (*env)->GetArrayLength(env, icmp_byte_array);
+	buffer_len = (*env)->GetArrayLength(env, data);
 	if (buffer_len <= 0) {
 		throwError(env, "java/io/IOException", "Insufficient data");
 		goto end_send;
@@ -728,7 +688,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 	// Copy the contents of the packet's byte[] array
 	// into the newly allocated buffer.
 	(*env)->GetByteArrayRegion(env,
-							   icmp_byte_array,
+							   data,
 							   0,
 							   buffer_len,
 							   (jbyte *)buffer);
@@ -790,15 +750,6 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 	}
 
 end_send:
-	if (dgram_class != NULL) {
-		(*env)->DeleteLocalRef(env, dgram_class);
-	}
-	if (addr_instance != NULL) {
-		(*env)->DeleteLocalRef(env, addr_instance);
-	}
-	if (icmp_byte_array != NULL) {
-		(*env)->DeleteLocalRef(env, icmp_byte_array);
-	}
 	if (buffer != NULL) {
 		free(buffer);
 	}

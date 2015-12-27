@@ -39,6 +39,8 @@ public interface ICMPEchoPacket {
 
     public int getPacketSize();
 
+    public byte[] toBytes();
+
     public DatagramPacket toDatagram();
 
     public long getThreadId();

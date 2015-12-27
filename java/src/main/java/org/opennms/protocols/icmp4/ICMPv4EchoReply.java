@@ -7,22 +7,20 @@ import org.opennms.protocols.icmp.ICMPEchoReply;
 
 public class ICMPv4EchoReply extends ICMPv4EchoPacket implements ICMPEchoReply {
 
-    public ICMPv4EchoReply(long tid) {
-        super(tid);
-    }
+    private final InetAddress m_source;
 
     public ICMPv4EchoReply(DatagramPacket packet) {
-        super(0);
+        super(packet.getData());
+        m_source = packet.getAddress();
     }
 
     @Override
     public InetAddress getSource() {
-        return null;
+        return m_source;
     }
 
     @Override
     public long getRoundTripTime() {
-        return 0;
+        return getPingRTT();
     }
-
 }

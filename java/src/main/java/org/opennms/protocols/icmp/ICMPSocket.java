@@ -101,7 +101,7 @@ public abstract class ICMPSocket implements AutoCloseable {
     public abstract ICMPEchoReply buildEchoReply(DatagramPacket packet);
 
     public void send(ICMPEchoRequest request) throws IOException {
-        sendPacket(request.toDatagram());
+        sendPacket(request.getDestination(), request.toBytes());
     }
 
     public ICMPEchoReply receive() throws IOException {
@@ -129,7 +129,7 @@ public abstract class ICMPSocket implements AutoCloseable {
      * @exception java.net.NoRouteToHostException
      *                Thrown if the destination address is a broadcast address.
      */
-    private final native void sendPacket(DatagramPacket request) throws IOException;
+    private final native void sendPacket(InetAddress target, byte[] data) throws IOException;
 
     /**
      * This method is used to receive the next ICMP datagram from the operating

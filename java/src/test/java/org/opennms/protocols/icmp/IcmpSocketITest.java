@@ -29,6 +29,7 @@
 package org.opennms.protocols.icmp;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -67,7 +68,6 @@ public class IcmpSocketITest {
         try (ICMPv4Socket socket = new ICMPv4Socket(1)) {
             ICMPEchoReply responsePacket = pingIt(socket, target);
             System.out.println("IPv4 RTT: " + responsePacket.getRoundTripTime());
-            assertTrue(responsePacket.getPacketSize() > 1);
         }
     }
 
@@ -77,7 +77,6 @@ public class IcmpSocketITest {
         try (ICMPv6Socket socket = new ICMPv6Socket(1)) {
             ICMPEchoReply responsePacket = pingIt(socket, target);
             System.out.println("IPv6 RTT: " + responsePacket.getRoundTripTime());
-            assertTrue(responsePacket.getPacketSize() > 1);
         }
     }
 
@@ -91,6 +90,11 @@ public class IcmpSocketITest {
         LOG.info("Sending echo request to '{}': {}", target, req);
         socket.send(req);
         LOG.info("Waiting for echo response...");
-        return socket.receive();
+        ICMPEchoReply resp = socket.receive();
+        LOG.info("Got response from {}", resp.getSource());
+        assertTrue("Packet must have a positive length", resp.getPacketSize() > 1);
+        assertTrue("Round trip time must be greater than 0", resp.getRoundTripTime() > 0);
+        assertEquals(target, resp.getSource());
+        return resp;
     }
 }

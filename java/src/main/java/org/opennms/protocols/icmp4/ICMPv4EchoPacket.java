@@ -411,6 +411,7 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
      * 
      * @return The object as an array of bytes.
      */
+    @Override
     public byte[] toBytes() {
         byte[] buf = new byte[getPacketSize()];
         storeToBuffer(buf, 0);
