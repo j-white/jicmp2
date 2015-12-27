@@ -38,6 +38,7 @@ import java.nio.file.Paths;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.opennms.protocols.icmp4.ICMPv4Socket;
+import org.opennms.protocols.icmp6.ICMPv6Socket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,31 +64,33 @@ public class IcmpSocketITest {
     @Test
     public void canPingLocalhostUsingIPv4Address() throws Exception {
         final InetAddress target = InetAddress.getByName("127.0.0.1");
-        ICMPEchoReply responsePacket = pingIt(target);
-        System.out.println("IPv4 RTT: " + responsePacket.getRoundTripTime());
-        assertTrue(responsePacket.getPacketSize() > 1);
+        try (ICMPv4Socket socket = new ICMPv4Socket(1)) {
+            ICMPEchoReply responsePacket = pingIt(socket, target);
+            System.out.println("IPv4 RTT: " + responsePacket.getRoundTripTime());
+            assertTrue(responsePacket.getPacketSize() > 1);
+        }
     }
 
     @Test
     public void canPingLocalhostUsingIPv6Address() throws Exception {
         final InetAddress target = InetAddress.getByName("::1");
-        ICMPEchoReply responsePacket = pingIt(target);
-        System.out.println("IPv6 RTT: " + responsePacket.getRoundTripTime());
-        assertTrue(responsePacket.getPacketSize() > 1);
+        try (ICMPv6Socket socket = new ICMPv6Socket(1)) {
+            ICMPEchoReply responsePacket = pingIt(socket, target);
+            System.out.println("IPv6 RTT: " + responsePacket.getRoundTripTime());
+            assertTrue(responsePacket.getPacketSize() > 1);
+        }
     }
 
-    private static ICMPEchoReply pingIt(InetAddress target) throws IOException {
-        try (ICMPv4Socket socket = new ICMPv4Socket(1)) {
-            ICMPEchoRequest req = new ICMPEchoRequestBuilder(target)
-                    .withThreadId(1)
-                    .withPacketSize(60)
-                    .withIdentity((short)1)
-                    .withSequenceId(1)
-                    .build();
-            LOG.info("Sending echo request to '{}': {}", target, req);
-            socket.send(req);
-            LOG.info("Waiting for echo response...");
-            return socket.receive();
-        }
+    private static ICMPEchoReply pingIt(ICMPSocket socket, InetAddress target) throws IOException {
+        ICMPEchoRequest req = new ICMPEchoRequestBuilder(target)
+                .withThreadId(1)
+                .withPacketSize(60)
+                .withIdentity((short)1)
+                .withSequenceId(1)
+                .build();
+        LOG.info("Sending echo request to '{}': {}", target, req);
+        socket.send(req);
+        LOG.info("Waiting for echo response...");
+        return socket.receive();
     }
 }

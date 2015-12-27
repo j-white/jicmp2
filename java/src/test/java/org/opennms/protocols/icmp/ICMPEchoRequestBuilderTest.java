@@ -31,6 +31,7 @@ public class ICMPEchoRequestBuilderTest {
 
         DatagramPacket pkt = req.toDatagram();
         assertEquals(target, pkt.getAddress());
+        //assertEquals(128, pkt.getLength());
     }
 
     @Test
@@ -51,5 +52,6 @@ public class ICMPEchoRequestBuilderTest {
 
         DatagramPacket pkt = req.toDatagram();
         assertEquals(target, pkt.getAddress());
+        assertEquals(128, pkt.getLength());
     }
 }

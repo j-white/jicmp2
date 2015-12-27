@@ -13,7 +13,7 @@ public class ICMPv6EchoReply extends ICMPv6EchoPacket implements ICMPEchoReply {
     }
 
     public ICMPv6EchoReply(DatagramPacket packet) {
-        super(0);
+        super(64);
         // TODO Auto-generated constructor stub
     }
 

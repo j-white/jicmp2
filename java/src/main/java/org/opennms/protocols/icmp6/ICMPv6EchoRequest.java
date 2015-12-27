@@ -31,6 +31,7 @@ package org.opennms.protocols.icmp6;
 
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoRequest;
 
@@ -50,6 +51,20 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket implements ICMPEchoReque
         setType(Type.EchoRequest);
         setCode(0);
         m_target = target;
+
+        setIdentifier(1);
+        setSequenceNumber(1);
+
+        // data fields
+        setThreadId(1);
+        setCookie();
+        // timestamp is set later
+
+        // fill buffer with 'interesting' data
+        ByteBuffer buf = getDataBuffer();
+        for(int b = DATA_LENGTH; b < buf.limit(); b++) {
+            buf.put(b, (byte)b);
+        }
     }
 
     @Override
