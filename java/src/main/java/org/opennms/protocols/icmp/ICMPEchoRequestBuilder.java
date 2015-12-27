@@ -93,14 +93,14 @@ public class ICMPEchoRequestBuilder {
     }
 
     private ICMPEchoRequest buildV4Packet() {
-        ICMPv4EchoRequest req = new ICMPv4EchoRequest(m_threadId, m_packetSize);
+        ICMPv4EchoRequest req = new ICMPv4EchoRequest(m_destination, m_threadId, m_packetSize);
         req.setIdentity(m_identity);
         req.setSequenceId((short)m_sequenceId);
         return req;
     }
 
     private ICMPEchoRequest buildV6Packet() {
-        ICMPv6EchoRequest req = new ICMPv6EchoRequest(m_packetSize);
+        ICMPv6EchoRequest req = new ICMPv6EchoRequest(m_destination, m_packetSize);
         req.setThreadId(m_threadId);
         req.setIdentifier(m_identity);
         req.setSequenceNumber(m_sequenceId);

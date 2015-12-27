@@ -29,8 +29,8 @@
  */
 package org.opennms.protocols.icmp6;
 
+import java.net.DatagramPacket;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoRequest;
 
@@ -43,57 +43,23 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket implements ICMPEchoReque
  
     public static final int PACKET_LENGTH = 64;
 
-    public ICMPv6EchoRequest() {
-        super(64);
-        setType(Type.EchoRequest);
-        setCode(0);
-    }
+    private final InetAddress m_target;
 
-    public ICMPv6EchoRequest(int size) {
+    public ICMPv6EchoRequest(InetAddress target, int size) {
         super(size);
         setType(Type.EchoRequest);
         setCode(0);
-    }
-
-    public ICMPv6EchoRequest(int id, int seqNum, long threadId) {
-        this();
-
-        setIdentifier(id);
-        setSequenceNumber(seqNum);
-        
-        // data fields
-        setThreadId(threadId);
-        setCookie();
-        // timestamp is set later
-
-        // fill buffer with 'interesting' data
-        ByteBuffer buf = getDataBuffer();
-        for(int b = DATA_LENGTH; b < buf.limit(); b++) {
-            buf.put(b, (byte)b);
-        }
-    }
-
-    public ICMPv6EchoRequest(int id, int seqNum, long threadId, int size) {
-        this(size);
-        
-        setIdentifier(id);
-        setSequenceNumber(seqNum);
-        
-        // data fields
-        setThreadId(threadId);
-        setCookie();
-        // timestamp is set later
-
-        // fill buffer with 'interesting' data
-        ByteBuffer buf = getDataBuffer();
-        for(int b = DATA_LENGTH; b < buf.limit(); b++) {
-            buf.put(b, (byte)b);
-        }
+        m_target = target;
     }
 
     @Override
     public InetAddress getDestination() {
-        // TODO Auto-generated method stub
-        return null;
+        return m_target;
+    }
+
+    @Override
+    public DatagramPacket toDatagram() {
+        final byte[] requestData = toBytes();
+        return new DatagramPacket(requestData, requestData.length, m_target, 0);
     }
 }

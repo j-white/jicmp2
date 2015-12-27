@@ -3,6 +3,7 @@ package org.opennms.protocols.icmp;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
@@ -26,6 +27,10 @@ public class ICMPEchoRequestBuilderTest {
         assertEquals(43, req.getIdentity());
         assertEquals(44, req.getSequenceId());
         //assertEquals(128, req.getPacketSize());
+        assertEquals(target, req.getDestination());
+
+        DatagramPacket pkt = req.toDatagram();
+        assertEquals(target, pkt.getAddress());
     }
 
     @Test
@@ -42,5 +47,9 @@ public class ICMPEchoRequestBuilderTest {
         assertEquals(43, req.getIdentity());
         assertEquals(44, req.getSequenceId());
         assertEquals(128, req.getPacketSize());
+        assertEquals(target, req.getDestination());
+
+        DatagramPacket pkt = req.toDatagram();
+        assertEquals(target, pkt.getAddress());
     }
 }

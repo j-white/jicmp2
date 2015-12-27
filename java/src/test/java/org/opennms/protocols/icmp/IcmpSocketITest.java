@@ -36,7 +36,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.opennms.protocols.icmp4.ICMPv4Socket;
 import org.slf4j.Logger;
@@ -69,7 +68,6 @@ public class IcmpSocketITest {
         assertTrue(responsePacket.getPacketSize() > 1);
     }
 
-    @Ignore
     @Test
     public void canPingLocalhostUsingIPv6Address() throws Exception {
         final InetAddress target = InetAddress.getByName("::1");
