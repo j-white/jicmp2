@@ -47,11 +47,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
     private long m_sent;
 
     /**
-     * Timestamp of when packet was received.
-     */
-    private long m_recv;
-
-    /**
      * The thread id of the sender. Effective key for the packet.
      */
     private long m_tid; // thread id
@@ -61,11 +56,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
      * (56 bytes) or whatever packetsize is sent in
      */
     private byte[] m_pad;
-
-    /**
-     * The ping rtt (microseconds)
-     */
-    private long m_rtt;
 
     /**
      * Converts a byte to a long and wraps the value to avoid sign extension.
@@ -126,9 +116,7 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
         super(ICMPv4Packet.TYPE_ECHO_REQUEST, (byte) 0);
         setNextSequenceId();
 
-        m_rtt = 0;
         m_sent = 0;
-        m_recv = 0;
         m_tid = tid;
         
         if (packetsize < getMinimumNetworkSize()) {
@@ -182,48 +170,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
     }
 
     /**
-     * Gets the currently set received time.
-     */
-    public final long getReceivedTime() {
-        return m_recv;
-    }
-
-    /**
-     * Sets the recieved time for the packet.
-     * 
-     * @see java.lang.System#currentTimeMillis
-     */
-    public final long setReceivedTime() {
-        m_recv = System.currentTimeMillis();
-        return m_recv;
-    }
-
-    /**
-     * Sets the received time to the passed value.
-     * 
-     * @param time
-     *            The new received time.
-     * 
-     */
-    public final void setReceivedTime(long time) {
-        m_recv = time;
-    }
-
-    /**
-     * Sets the ping Round Trip Time
-     */
-    public final void setPingRTT(long time) {
-        m_rtt = time;
-    }
-
-    /**
-     * Gets the ping Round Trip Time
-     */
-    public final long getPingRTT() {
-        return m_rtt;
-    }
-
-    /**
 	 * Returns the size of the integer headers in packet 
      */
     public int getDataSize() {
@@ -250,9 +196,7 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
         OC16ChecksumProducer summer = new OC16ChecksumProducer();
 
         super.computeChecksum(summer);
-        summer.add(m_rtt);
         summer.add(m_sent);
-        summer.add(m_recv);
         summer.add(m_tid);
 
         //
@@ -320,22 +264,10 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
             m_sent |= byteToLong(buf[offset++]);
         }
 
-        m_recv = 0;
-        for (int x = 0; x < 8; x++) {
-            m_recv <<= 8;
-            m_recv |= byteToLong(buf[offset++]);
-        }
-
         m_tid = 0;
         for (int x = 0; x < 8; x++) {
             m_tid <<= 8;
             m_tid |= byteToLong(buf[offset++]);
-        }
-
-        m_rtt = 0;
-        for (int x = 0; x < 8; x++) {
-            m_rtt <<= 8;
-            m_rtt |= byteToLong(buf[offset++]);
         }
 
         // skip over the header and timestamp data
@@ -380,19 +312,7 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
             t <<= 8;
         }
 
-        t = m_recv;
-        for (int x = 0; x < 8; x++) {
-            buf[offset++] = (byte) (t >>> 56);
-            t <<= 8;
-        }
-
         t = m_tid;
-        for (int x = 0; x < 8; x++) {
-            buf[offset++] = (byte) (t >>> 56);
-            t <<= 8;
-        }
-
-        t = m_rtt;
         for (int x = 0; x < 8; x++) {
             buf[offset++] = (byte) (t >>> 56);
             t <<= 8;

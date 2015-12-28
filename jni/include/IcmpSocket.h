@@ -278,24 +278,10 @@ typedef struct icmphdr icmphdr_t;
 #endif
 
 /**
- * Specifies the offset of the received time.
- */
-#ifndef RECVTIME_OFFSET
-# define RECVTIME_OFFSET (SENTTIME_OFFSET + TIME_LENGTH)
-#endif
-
-/**
  * Specifies the offset of the thread identifer
  */
 #ifndef THREADID_OFFSET
-# define THREADID_OFFSET (RECVTIME_OFFSET + TIME_LENGTH)
-#endif
-
-/**
- * Specifies the offset of the round trip time
- */
-#ifndef RTT_OFFSET
-# define RTT_OFFSET (THREADID_OFFSET + TIME_LENGTH)
+# define THREADID_OFFSET (SENTTIME_OFFSET + TIME_LENGTH)
 #endif
 
 /**
@@ -305,7 +291,7 @@ typedef struct icmphdr icmphdr_t;
 #ifndef OPENNMS_TAG
 # define OPENNMS_TAG "OpenNMS!"
 # define OPENNMS_TAG_LEN 8
-# define OPENNMS_TAG_OFFSET (RTT_OFFSET + TIME_LENGTH)
+# define OPENNMS_TAG_OFFSET (THREADID_OFFSET + TIME_LENGTH)
 #endif
 
 /**

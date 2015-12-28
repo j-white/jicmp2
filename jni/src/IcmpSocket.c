@@ -676,10 +676,6 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 
 	if (shouldUpdatePayload) {
 		uint64_t now = 0;
-
-		memcpy((char *)buffer + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-		memcpy((char *)buffer + RTT_OFFSET, (char *)&now, TIME_LENGTH);
-
 		CURRENTTIMEMICROS(now);
 		now = htonll(now);
 		memcpy((char *)buffer + SENTTIME_OFFSET, (char *)&now, TIME_LENGTH);

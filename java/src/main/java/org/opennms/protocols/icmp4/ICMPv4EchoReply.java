@@ -8,12 +8,14 @@ import org.opennms.protocols.icmp.ResponsePacket;
 public class ICMPv4EchoReply extends ICMPv4EchoPacket implements ICMPEchoReply {
 
     private final InetAddress m_source;
+    private final long m_receivedTime;
+    private final long m_roundTripTime;
 
     public ICMPv4EchoReply(ResponsePacket packet) {
         super(packet.getData());
         m_source = packet.getSource();
-        setReceivedTime(packet.getReceivedTime());
-        setPingRTT(getReceivedTime() - getSentTime());
+        m_receivedTime = packet.getReceivedTime();
+        m_roundTripTime = m_receivedTime - getSentTime();
     }
 
     @Override
@@ -22,7 +24,12 @@ public class ICMPv4EchoReply extends ICMPv4EchoPacket implements ICMPEchoReply {
     }
 
     @Override
+    public long getReceivedTime() {
+        return m_receivedTime;
+    }
+
+    @Override
     public long getRoundTripTime() {
-        return getPingRTT();
+        return m_roundTripTime;
     }
 }

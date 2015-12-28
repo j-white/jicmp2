@@ -48,7 +48,7 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket implements ICMPEchoReque
 
     public ICMPv6EchoRequest(InetAddress target, int size) {
         super(size);
-        setType(Type.EchoRequest);
+        setType(ICMPv6Type.EchoRequest);
         setCode(0);
         m_target = target;
 

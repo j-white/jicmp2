@@ -42,40 +42,9 @@ public class ICMPv6Packet {
     public static final int HEADER_OFFSET_TYPE = 0;
     public static final int HEADER_OFFSET_CODE = 1;
     public static final int HEADER_OFFSET_CHECKSUM = 2;
-    
-    public enum Type {
-        DestinationUnreachable(1),
-        TimeExceeded(3),
-        EchoRequest(128),
-        EchoReply(129),
-
-        // this is used to represent a type code that we have not handled
-        Other(-1);
-        
-        
-        private int m_code;
-        private Type(int code) {
-            m_code = code;
-        }
-        
-        public int getCode() {
-            return m_code;
-        }
-        
-        public static Type toType(byte typeCode) {
-            int code = (typeCode & 0xff);
-            for(Type p : Type.values()) {
-                if (code == p.getCode()) {
-                    return p;
-                }
-            }
-            return Other;
-        }
-        
-    }
 
     ByteBuffer m_packetData;
-    
+
     public ICMPv6Packet(byte[] bytes, int offset, int length) {
         this(ByteBuffer.wrap(bytes, offset, length));
     }
@@ -95,16 +64,15 @@ public class ICMPv6Packet {
     public int getPacketSize() {
         return m_packetData.limit();
     }
-    
-    
-    public Type getAType() {
-        return Type.toType(m_packetData.get(HEADER_OFFSET_TYPE));
+
+    public ICMPv6Type getAType() {
+        return ICMPv6Type.toType(m_packetData.get(HEADER_OFFSET_TYPE));
     }
-    
-    public void setType(Type t) {
+
+    public void setType(ICMPv6Type t) {
         m_packetData.put(HEADER_OFFSET_TYPE, ((byte)(t.getCode())));
     }
-    
+
     public int getCode() {
         return 0xff & m_packetData.get(HEADER_OFFSET_CODE);
     }
@@ -112,7 +80,7 @@ public class ICMPv6Packet {
     public void setCode(int code) {
         m_packetData.put(HEADER_OFFSET_CODE, ((byte)code));
     }
-    
+
     public int getChecksum() {
         return getUnsignedShort(HEADER_OFFSET_CHECKSUM);
     }

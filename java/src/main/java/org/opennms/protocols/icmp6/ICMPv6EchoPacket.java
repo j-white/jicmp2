@@ -34,7 +34,6 @@ import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoPacket;
 
-
 /**
  * ICMPEchoReply
  *
@@ -45,21 +44,19 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
     // This long is equivalent to 'OpenNMS!' in ascii
     public static final long COOKIE = 0x4F70656E4E4D5321L;
     
-    // offsets for TYPE, CODE and CHECK_SUM defined in ICMPv6Packet
+    // Offsets for TYPE, CODE and CHECK_SUM defined in ICMPv6Packet
     public static final int HEADER_OFFSET_IDENTIFIER = 4;
     public static final int HEADER_OFFSET_SEQUENCE_NUMBER = 6;
     public static final int HEADER_LENGTH = 8;
 
     // Packet payload format
     public static final int DATA_OFFSET_SENTTIME = 0;
-    public static final int DATA_OFFSET_RECVTIME = 8;
-    public static final int DATA_OFFSET_THREAD_ID = 16;
-    public static final int DATA_OFFSET_RTT = 24;
-    public static final int DATA_OFFSET_COOKIE = 32;
+    public static final int DATA_OFFSET_THREAD_ID = 8;
+    public static final int DATA_OFFSET_COOKIE = 16;
     public static final int DATA_LENGTH = 8*5;
-    
+
     private final ByteBuffer m_dataBuffer;
-    
+
     public ICMPv6EchoPacket(int size) {
         super(size);
         ByteBuffer content = m_packetData.duplicate();
@@ -106,15 +103,6 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
         getDataBuffer().putLong(DATA_OFFSET_SENTTIME, sentTime);
     }
 
-
-    public long getReceiveTime() {
-        return getDataBuffer().getLong(DATA_OFFSET_RECVTIME);
-    }
-    
-    public void setReceiveTime(long recvTime) {
-        getDataBuffer().putLong(DATA_OFFSET_RECVTIME, recvTime);
-    }
-
     @Override
     public long getThreadId() {
         return getDataBuffer().getLong(DATA_OFFSET_THREAD_ID);
@@ -122,14 +110,6 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
     
     public void setThreadId(long threadId) {
         getDataBuffer().putLong(DATA_OFFSET_THREAD_ID, threadId);
-    }
-
-    public long getRoundTripTime() {
-        return getDataBuffer().getLong(DATA_OFFSET_RTT);
-    }
-    
-    public void setRoundTripTime(long rtt) {
-        getDataBuffer().putLong(DATA_OFFSET_RTT, rtt);
     }
 
     public long getCookie() {
