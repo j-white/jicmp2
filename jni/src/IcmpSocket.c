@@ -1,10 +1,10 @@
 /*******************************************************************************
  * This file is part of OpenNMS(R).
  *
- * Copyright (C) 2010-2015 The OpenNMS Group, Inc.
- * OpenNMS(R) is Copyright (C) 1999-2015 The OpenNMS Group, Inc.
+ * Copyright (C) 2010-2016 The OpenNMS Group, Inc.
+ * OpenNMS(R) is Copyright (C) 1999-2016 The OpenNMS Group, Inc.
  *
- * OpenNMS(R) is Copyright (C) 2002-2015 The OpenNMS Group, Inc.  All rights
+ * OpenNMS(R) is Copyright (C) 2002-2016 The OpenNMS Group, Inc.  All rights
  * reserved.  OpenNMS(R) is a derivative work, containing both original code,
  * included code and modified code that was published under the GNU General
  * Public License.  Copyrights for modified and included code are below.
@@ -43,6 +43,10 @@
 #pragma export reset
 #endif
 
+/**
+ * State attributes which are stored
+ * in the associated Java instance
+ */
 typedef struct {
 	sa_family_t family;
 	onms_socket fd;
@@ -675,10 +679,10 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 		goto end_send;
 	}
 
-	// Check for 'OpenNMS!' at byte offset 32. If
+	// Check for 'OpenNMS!' at byte offset 16. If
 	// it's found then we need to modify the time
-	// and checksum for transmission. ICMP type
-	// must equal 8 for ECHO_REQUEST
+	// for transmission.
+	// ICMP type must equal 8 for ECHO_REQUEST
 	// Don't forget to check for a potential buffer overflow!
 	char shouldUpdatePayload = 0;
 	if (attr.family == AF_INET) {
@@ -716,7 +720,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_sendPacket (JNIEnv *env, jobject inst
 					  in_addr_len);
 
 	if (ret == SOCKET_ERROR && errno == EACCES) {
-		throwError(env, "java/net/NoRouteToHostException", "cannot send to broadcast address");
+		throwError(env, "java/net/NoRouteToHostException", "Cannot send to broadcast address.");
 	} else if (ret != buffer_len) {
 		int	saved_errno = errno;
 		strerror_r(saved_errno, error_msg, sizeof(error_msg));

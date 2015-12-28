@@ -1,37 +1,35 @@
-/*
- This file is part of the OpenNMS(R) Application.
-
- OpenNMS(R) is Copyright (C) 2002-2007 The OpenNMS Group, Inc.  All rights reserved.
- OpenNMS(R) is a derivative work, containing both original code, included code and modified
- code that was published under the GNU General Public License. Copyrights for modified
- and included code are below.
-
- OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
-
- Original code base Copyright (C) 1999-2001 Oculan Corp.  All rights reserved.
-
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-
- For more information contact:
-      OpenNMS Licensing       <license@opennms.org>
-      http://www.opennms.org/
-      http://www.opennms.com/
-
-
- Tab Size = 8
-*/
+/*******************************************************************************
+ * This file is part of OpenNMS(R).
+ *
+ * Copyright (C) 2010-2016 The OpenNMS Group, Inc.
+ * OpenNMS(R) is Copyright (C) 1999-2016 The OpenNMS Group, Inc.
+ *
+ * OpenNMS(R) is Copyright (C) 2002-2016 The OpenNMS Group, Inc.  All rights
+ * reserved.  OpenNMS(R) is a derivative work, containing both original code,
+ * included code and modified code that was published under the GNU General
+ * Public License.  Copyrights for modified and included code are below.
+ *
+ * OpenNMS(R) is a registered trademark of The OpenNMS Group, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License with the Classpath
+ * Exception; either version 2 of the License, or (at your option) any later
+ * version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *
+ * For more information contact:
+ *     OpenNMS(R) Licensing <license@opennms.org>
+ *     http://www.opennms.org/
+ *     http://www.opennms.com/
+ *******************************************************************************/
 
 #ifndef _ICMPSOCKET_H
 #define _ICMPSOCKET_H
@@ -202,7 +200,7 @@ typedef struct ip iphdr_t;
 #elif defined(HAVE_STRUCT_IPHDR)
 typedef struct iphdr iphdr_t;
 #else
-# error "not sure how to get an IP header struct on this platform!"
+# error "Not sure how to get an IP header struct on this platform!"
 #endif
 
 #define HAVE_STRUCT_ICMP 1
@@ -211,20 +209,7 @@ typedef struct icmp icmphdr_t;
 #elif defined(HAVE_STRUCT_ICMPHDR)
 typedef struct icmphdr icmphdr_t;
 #else
-# error "not sure how to get an ICMP header struct on this platform!"
-#endif
-
-/**
- * This macro is used to recover the current time
- * in milliseconds.
- */
-#ifndef CURRENTTIMEMILLIS
-#define CURRENTTIMEMILLIS(_dst_) \
-{				\
-	struct timeval tv;	\
-	gettimeofday(&tv,NULL); \
-	_dst_ = (uint64_t)tv.tv_sec * 1000UL + (uint64_t)tv.tv_usec / 1000UL; \
-}
+# error "Not sure how to get an ICMP header struct on this platform!"
 #endif
 
 /**
@@ -238,20 +223,6 @@ typedef struct icmphdr icmphdr_t;
 	gettimeofday(&tv,NULL); \
 	_dst_ = (uint64_t)tv.tv_sec * 1000000UL + (uint64_t)tv.tv_usec; \
 }
-#endif
-
-/**
- * converts microseconds to milliseconds
- */
-#ifndef MICROS_TO_MILLIS
-# define MICROS_TO_MILLIS(_val_) ((_val_) / 1000UL)
-#endif
-
-/**
- * convert milliseconds to microseconds.
- */
-#ifndef MILLIS_TO_MICROS
-# define MILLIS_TO_MICROS(_val_) ((_val_) * 1000UL)
 #endif
 
 /**

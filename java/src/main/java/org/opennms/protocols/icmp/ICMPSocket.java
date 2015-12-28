@@ -48,14 +48,16 @@ public abstract class ICMPSocket implements AutoCloseable {
 
     /**
      * This instance is used by the native code to save and store file
-     * descriptor information about the icmp socket. This needs to be
-     * constructed prior to calling the init method, preferable in the
-     * constructor.
+     * descriptor information about the underlying socket.
      * 
-     * It looks unused, but it is used solely by native code.
+     * This needs to be constructed prior to calling the init method.
      */
     private final FileDescriptor m_rawFd;
 
+    /**
+     * This instance is used by the native code to store a reference
+     * to the receive buffer, which is used by the receivePacket() call.
+     */
     private long m_receiveBufferPtr = 0L;
 
     private final int m_pingerId;
