@@ -29,7 +29,6 @@
  */
 package org.opennms.protocols.icmp6;
 
-import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 
@@ -70,11 +69,5 @@ public class ICMPv6EchoRequest extends ICMPv6EchoPacket implements ICMPEchoReque
     @Override
     public InetAddress getDestination() {
         return m_target;
-    }
-
-    @Override
-    public DatagramPacket toDatagram() {
-        final byte[] requestData = toBytes();
-        return new DatagramPacket(requestData, requestData.length, m_target, 0);
     }
 }

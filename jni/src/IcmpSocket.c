@@ -213,6 +213,11 @@ end_setfd:
 	}
 }
 
+/**
+ * Creates a new InetAddress object.
+ * Network address must be passed in network byte order.
+ * Supports both IPv4 and IPv6 addresses (determined based on the given size)
+ */
 static jobject newInetAddressFromBytes(JNIEnv *env, unsigned char* addr, u_int size) {
 	jclass addr_class;
 	jmethodID addr_by_address_method_id;
@@ -261,6 +266,9 @@ end_inet:
 	return new_addr_instance;
 }
 
+/**
+ * Converts an InetAddress object to byte array.
+ */
 static void getInetAddressBytes(JNIEnv *env, jobject inet_address_instance, jsize len, jbyte *buf) {
 	jclass addr_class = NULL;
 	jmethodID get_address_method_id = NULL;

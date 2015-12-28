@@ -29,7 +29,6 @@
  */
 package org.opennms.protocols.icmp6;
 
-import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoPacket;
@@ -115,14 +114,9 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
     public long getCookie() {
         return getDataBuffer().getLong(DATA_OFFSET_COOKIE);
     }
+
     public void setCookie() {
         getDataBuffer().putLong(DATA_OFFSET_COOKIE, COOKIE);
-    }
-
-    @Override
-    public DatagramPacket toDatagram() {
-        final byte[] requestData = toBytes();
-        return new DatagramPacket(requestData, requestData.length, null, 0);
     }
 
     @Override

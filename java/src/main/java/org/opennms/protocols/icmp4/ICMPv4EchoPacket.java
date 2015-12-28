@@ -28,8 +28,6 @@
 
 package org.opennms.protocols.icmp4;
 
-import java.net.DatagramPacket;
-
 import org.opennms.protocols.icmp.ICMPEchoPacket;
 import org.opennms.protocols.icmp.PacketUtils;
 
@@ -336,12 +334,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
         byte[] buf = new byte[getPacketSize()];
         storeToBuffer(buf, 0);
         return buf;
-    }
-
-    @Override
-    public DatagramPacket toDatagram() {
-        final byte[] requestData = toBytes();
-        return new DatagramPacket(requestData, requestData.length, null, 0);
     }
 
     @Override
