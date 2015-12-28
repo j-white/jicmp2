@@ -1,17 +1,19 @@
 package org.opennms.protocols.icmp4;
 
-import java.net.DatagramPacket;
 import java.net.InetAddress;
 
 import org.opennms.protocols.icmp.ICMPEchoReply;
+import org.opennms.protocols.icmp.ResponsePacket;
 
 public class ICMPv4EchoReply extends ICMPv4EchoPacket implements ICMPEchoReply {
 
     private final InetAddress m_source;
 
-    public ICMPv4EchoReply(DatagramPacket packet) {
+    public ICMPv4EchoReply(ResponsePacket packet) {
         super(packet.getData());
-        m_source = packet.getAddress();
+        m_source = packet.getSource();
+        setReceivedTime(packet.getReceivedTime());
+        setPingRTT(getReceivedTime() - getSentTime());
     }
 
     @Override

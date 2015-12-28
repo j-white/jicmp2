@@ -1,17 +1,19 @@
 package org.opennms.protocols.icmp6;
 
-import java.net.DatagramPacket;
 import java.net.InetAddress;
 
 import org.opennms.protocols.icmp.ICMPEchoReply;
+import org.opennms.protocols.icmp.ResponsePacket;
 
 public class ICMPv6EchoReply extends ICMPv6EchoPacket implements ICMPEchoReply {
 
     private final InetAddress m_source;
 
-    public ICMPv6EchoReply(DatagramPacket packet) {
+    public ICMPv6EchoReply(ResponsePacket packet) {
         super(packet.getData());
-        m_source = packet.getAddress();
+        m_source = packet.getSource();
+        setReceiveTime(packet.getReceivedTime());
+        setRoundTripTime(getReceivedTime() - getSentTime());
     }
 
     @Override

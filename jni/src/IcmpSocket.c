@@ -404,6 +404,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 	void *buffer = NULL;
 	struct sockaddr *in_addr;
 	onms_socklen_t in_addr_len;
+	uint64_t received_time;
 
 	char exception_msg[256];
 	char error_msg[128];
@@ -423,9 +424,9 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 
 	jbyteArray byte_array = NULL;
 	jobject addr_instance = NULL;
-	jobject	datagram_instance = NULL;
-	jclass datagram_class = NULL;
-	jmethodID datagram_ctor_method_id = NULL;
+	jobject	response_packet = NULL;
+	jclass response_packet_class = NULL;
+	jmethodID response_packet_ctor_method_id = NULL;
 
 	IcmpSocketAttributes attr;
 	if (getIcmpSocketAttributes(env, instance, &attr)) {
@@ -476,8 +477,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		throwError(env, "java/io/EOFException", "End-of-File returned from socket descriptor");
 		goto end_recv;
 	}
-
-	char updateRecvTime = 0;
+	CURRENTTIMEMICROS(received_time);
 
 	if (attr.family == AF_INET) {
 		// We need to remove the IP header from the message.
@@ -494,61 +494,14 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		}
 		icmp_hdr_v4 = (icmphdr_t *) ((char *) buffer + (ip_hdr_v4->ONMS_IP_HL << 2));
 
-		// Check the ICMP header for type equal 0, which is ECHO_REPLY, and
-		// then check the payload for the 'OpenNMS!' marker.
-		if (ret >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-			&& icmp_hdr_v4->ICMP_TYPE == 0
-			&& memcmp((char *) icmp_hdr_v4 + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			updateRecvTime = 1;
-		}
-
 		source_addr_bytes = (unsigned char*)&in_addr_v4.sin_addr.s_addr;
 		source_addr_size = 4;
 		icmp_pkt_bytes = icmp_hdr_v4;
 	} else {
 		icmp_hdr_v6 = (struct icmp6_hdr *)((char *)buffer);
-
-		// Check the ICMP header for type ECHO_REPLY, and
-		// then check the payload for the 'OpenNMS!' marker.
-		if(ret >= (OPENNMS_TAG_OFFSET + OPENNMS_TAG_LEN)
-		   && icmp_hdr_v6->icmp6_type == ICMP6_ECHO_REPLY
-		   && memcmp((char *)icmp_hdr_v6 + OPENNMS_TAG_OFFSET, OPENNMS_TAG, OPENNMS_TAG_LEN) == 0) {
-			updateRecvTime = 1;
-		}
-
 		source_addr_bytes = in_addr_v6.sin6_addr.s6_addr;
 		source_addr_size = 16;
 		icmp_pkt_bytes = icmp_hdr_v6;
-	}
-
-	if (updateRecvTime) {
-		uint64_t now;
-		uint64_t sent;
-		uint64_t diff;
-
-		// Get the current time in microseconds and then compute the difference
-		// FIXME: This should be passed as an auxilary object instead of jamming it
-		// in the ICMP data. This would also allow us to send out smaller packets
-		CURRENTTIMEMICROS(now);
-		memcpy((char *)&sent, icmp_pkt_bytes + SENTTIME_OFFSET, TIME_LENGTH);
-		sent = ntohll(sent);
-		diff = now - sent;
-
-		// Now fill in the sent, received, and diff
-		sent = MICROS_TO_MILLIS(sent);
-		sent = htonll(sent);
-		memcpy(icmp_pkt_bytes + SENTTIME_OFFSET, (char *)&sent, TIME_LENGTH);
-
-		now  = MICROS_TO_MILLIS(now);
-		now  = htonll(now);
-		memcpy(icmp_pkt_bytes + RECVTIME_OFFSET, (char *)&now, TIME_LENGTH);
-
-		diff = htonll(diff);
-		memcpy(icmp_pkt_bytes + RTT_OFFSET, (char *)&diff, TIME_LENGTH);
-
-		// FIXME: Maybe we should be verifying the checksum before we alter the packet, or is that handled for us?
-		// No need to recompute checksum on this on
-		// since we don't actually check it upon receipt
 	}
 
 	// Now construct a new java.net.InetAddress object from
@@ -559,7 +512,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		goto end_recv;
 	}
 
-	// Get the byte array needed to setup the datagram constructor.
+	// Get the byte array needed to setup the ResponsePacket constructor.
 	byte_array = (*env)->NewByteArray(env, (jsize)ret);
 	if (byte_array != NULL && (*env)->ExceptionOccurred(env) == NULL) {
 		(*env)->SetByteArrayRegion(env,
@@ -573,29 +526,28 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		goto end_recv;
 	}
 
-	// Get the Datagram class
-	datagram_class = (*env)->FindClass(env, "java/net/DatagramPacket");
-	if (datagram_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	// Get the ResponsePacket class
+	response_packet_class = (*env)->FindClass(env, "org/opennms/protocols/icmp/ResponsePacket");
+	if (response_packet_class == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
-	// Datagram constructor identifier
-	datagram_ctor_method_id = (*env)->GetMethodID(env,
-												  datagram_class,
-												  "<init>",
-												  "([BILjava/net/InetAddress;I)V");
-	if (datagram_ctor_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
+	// ResponsePacket constructor identifier
+	response_packet_ctor_method_id = (*env)->GetMethodID(env,
+														 response_packet_class,
+														 "<init>",
+														 "(Ljava/net/InetAddress;[BJ)V");
+	if (response_packet_ctor_method_id == NULL || (*env)->ExceptionOccurred(env) != NULL) {
 		goto end_recv;
 	}
 
 	// New one!
-	datagram_instance = (*env)->NewObject(env,
-										  datagram_class,
-										  datagram_ctor_method_id,
-										  byte_array,
-										  (jint)ret,
-										  addr_instance,
-										  (jint)0);
+	response_packet = (*env)->NewObject(env,
+										response_packet_class,
+										response_packet_ctor_method_id,
+										addr_instance,
+										byte_array,
+										(jlong)received_time);
 
 end_recv:
 	if (addr_instance != NULL) {
@@ -604,14 +556,14 @@ end_recv:
 	if (byte_array != NULL) {
 		(*env)->DeleteLocalRef(env, byte_array);
 	}
-	if (datagram_class != NULL) {
-		(*env)->DeleteLocalRef(env, datagram_class);
+	if (response_packet_class != NULL) {
+		(*env)->DeleteLocalRef(env, response_packet_class);
 	}
 	if (buffer != NULL) {
 		free(buffer);
 	}
 
-	return datagram_instance;
+	return response_packet;
 }
 
 /*

@@ -1,12 +1,12 @@
 package org.opennms.protocols.icmp4;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 import org.opennms.protocols.icmp.ICMPSocket;
+import org.opennms.protocols.icmp.ResponsePacket;
 
 public class ICMPv4Socket extends ICMPSocket {
     public ICMPv4Socket(int pingerId) throws IOException {
@@ -19,7 +19,7 @@ public class ICMPv4Socket extends ICMPSocket {
     }
 
     @Override
-    public ICMPv4EchoReply buildEchoReply(DatagramPacket packet) {
+    public ICMPv4EchoReply buildEchoReply(ResponsePacket packet) {
         return new ICMPv4EchoReply(packet);
     }
 }

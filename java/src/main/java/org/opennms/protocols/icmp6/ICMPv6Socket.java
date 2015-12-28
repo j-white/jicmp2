@@ -1,12 +1,13 @@
 package org.opennms.protocols.icmp6;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
+import org.opennms.protocols.icmp.ICMPEchoReply;
 import org.opennms.protocols.icmp.ICMPSocket;
+import org.opennms.protocols.icmp.ResponsePacket;
 
 public class ICMPv6Socket extends ICMPSocket {
     public ICMPv6Socket(int pingerId) throws IOException {
@@ -19,7 +20,7 @@ public class ICMPv6Socket extends ICMPSocket {
     }
 
     @Override
-    public ICMPv6EchoReply buildEchoReply(DatagramPacket packet) {
+    public ICMPEchoReply buildEchoReply(ResponsePacket packet) {
         return new ICMPv6EchoReply(packet);
     }
 }

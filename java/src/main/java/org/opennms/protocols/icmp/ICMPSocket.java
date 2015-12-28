@@ -30,7 +30,6 @@ package org.opennms.protocols.icmp;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
@@ -98,7 +97,7 @@ public abstract class ICMPSocket implements AutoCloseable {
 
     public abstract InetAddress getLocalhost() throws UnknownHostException;
 
-    public abstract ICMPEchoReply buildEchoReply(DatagramPacket packet);
+    public abstract ICMPEchoReply buildEchoReply(ResponsePacket packet);
 
     public void send(ICMPEchoRequest request) throws IOException {
         sendPacket(request.getDestination(), request.toBytes());
@@ -141,7 +140,7 @@ public abstract class ICMPSocket implements AutoCloseable {
      *                Thrown if an error occurs reading the next ICMP message.
      * 
      */
-    private final native DatagramPacket receivePacket() throws IOException;
+    private final native ResponsePacket receivePacket() throws IOException;
 
     /**
      * This method is used to close and release the resources associated with the
