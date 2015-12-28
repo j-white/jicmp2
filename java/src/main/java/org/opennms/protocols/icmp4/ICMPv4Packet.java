@@ -261,7 +261,7 @@ public class ICMPv4Packet {
      * 
      */
     public ICMPv4Packet(byte[] data, int offset) {
-        if ((data.length - offset) < getNetworkSize())
+        if ((data.length - offset) < getHeaderSize())
             throw new IndexOutOfBoundsException("Insufficient number of bytes available to construct the ICMP header");
 
         m_type = data[offset++];
@@ -384,7 +384,7 @@ public class ICMPv4Packet {
 
     /**
      * Writes the ICMP header out to the specified buffer at the starting
-     * offset. If the buffer does not have sufficent data to store the
+     * offset. If the buffer does not have sufficient data to store the
      * information then an IndexOutOfBoundsException is thrown.
      * 
      * @param buf
@@ -445,22 +445,6 @@ public class ICMPv4Packet {
 
         return offset;
     }
-
-    /**
-     * Returns the number of bytes required to read/write an icmp header. A
-     * header is composed of a fixed size number of byte. This is not expected
-     * to change, but this method allows derived classes to query the number of
-     * bytes for reading/writing an icmp header. Thus should the standard ever
-     * change, the derived class should be able to dynamically handle the
-     * change.
-     * 
-     * @return The number of bytes required to read/write an icmp header.
-     * 
-     */
-    @Deprecated
-    public static int getNetworkSize() {
-    	return 8;	
-	}
     
 	public int getHeaderSize() {
 		return 8;

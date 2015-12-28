@@ -25,11 +25,11 @@ public class ICMPEchoRequestBuilderTest {
         assertEquals(42, req.getThreadId());
         assertEquals(43, req.getIdentity());
         assertEquals(44, req.getSequenceId());
-        //assertEquals(128, req.getPacketSize());
+        assertEquals(128, req.getPacketSize());
         assertEquals(target, req.getDestination());
 
         assertEquals(target, req.getDestination());
-        //assertEquals(128, req.toBytes().length);
+        assertEquals(128, req.toBytes().length);
     }
 
     @Test

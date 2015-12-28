@@ -117,11 +117,11 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
         m_sent = 0;
         m_tid = tid;
         
-        if (packetsize < getMinimumNetworkSize()) {
+        if (packetsize < getDataSize()) {
         	throw new IllegalArgumentException("Minimum size for a ICMPEchoPacket is " + getMinimumNetworkSize() + " bytes.");
         }
         
-        m_pad = new byte[packetsize - getMinimumNetworkSize()];
+        m_pad = new byte[packetsize - getDataSize()];
         for (int x = 0; x < PacketUtils.NAMED_PAD.length && x < m_pad.length; x++)
             m_pad[x] = PacketUtils.NAMED_PAD[x];
         for (int x = PacketUtils.NAMED_PAD.length; x < m_pad.length; x++)
@@ -170,7 +170,7 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
 	 * Returns the size of the integer headers in packet 
      */
     public int getDataSize() {
-        return (getHeaderSize() + 32);
+        return (getHeaderSize() + 16);
     }
 
     /**
