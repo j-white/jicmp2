@@ -47,6 +47,7 @@ typedef struct {
 	sa_family_t family;
 	onms_socket fd;
 	uint16_t id;
+	void *buffer;
 } IcmpSocketAttributes;
 
 /**
@@ -136,6 +137,10 @@ static int getIcmpSocketAttributes(JNIEnv *env, jobject instance, IcmpSocketAttr
 	state->fd = (*env)->GetIntField(env, fd_instance, fd_field);
 #endif
 
+	// Retrieve the pointer to our buffer
+	field_id = (*env)->GetFieldID(env, icmp_socket_class, "m_receiveBufferPtr", "J");
+	state->buffer = (void*)(*env)->GetLongField(env, instance, field_id);
+
 	// We've successfully retrieved all of the attributes
 	ret = 0;
 
@@ -210,6 +215,26 @@ end_setfd:
 	}
 	if (fd_instance != NULL) {
 		(*env)->DeleteLocalRef(env, fd_instance);
+	}
+}
+
+static void setReceiveBufferPtr(JNIEnv *env, jobject instance, void *buffer) {
+	jclass icmp_socket_class = NULL;
+	jfieldID receive_buffer_ptr_field = NULL;
+
+	// Find the class that describes ourself
+	icmp_socket_class = (*env)->GetObjectClass(env, instance);
+	if (icmp_socket_class == NULL) {
+		goto end_setptr;
+	}
+
+	receive_buffer_ptr_field = (*env)->GetFieldID(env, icmp_socket_class, "m_receiveBufferPtr", "J");
+
+	(*env)->SetLongField(env, instance, receive_buffer_ptr_field, (jlong)buffer);
+
+end_setptr:
+	if (icmp_socket_class != NULL) {
+		(*env)->DeleteLocalRef(env, icmp_socket_class);
 	}
 }
 
@@ -399,6 +424,18 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 
 	// Save the fd on the instance of the ICMPSocket
 	setIcmpFd(env, instance, attr.fd);
+
+	// Allocate a buffer to receive data if necessary.
+	// This is probably more than necessary, but we don't
+	// want to lose messages if we don't need to.
+	attr.buffer = malloc(MAX_PACKET);
+	if (attr.buffer == NULL) {
+		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram.");
+		return;
+	}
+
+	// Save the reference to the buffer in the Java object
+	setReceiveBufferPtr(env, instance, attr.buffer);
 }
 
 /*
@@ -409,7 +446,6 @@ Java_org_opennms_protocols_icmp_ICMPSocket_initSocket (JNIEnv *env, jobject inst
 JNIEXPORT jobject JNICALL
 Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject instance) {
 	int ret;
-	void *buffer = NULL;
 	struct sockaddr *in_addr;
 	onms_socklen_t in_addr_len;
 	uint64_t received_time;
@@ -442,20 +478,6 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		goto end_recv;
 	}
 
-	// Allocate a buffer to receive data if necessary.
-	// This is probably more than necessary, but we don't
-	// want to lose messages if we don't need to. This also
-	// must be dynamic for MT-Safe reasons and avoids blowing
-	// up the stack.
-	// FIXME: Is there a way to pass this buffer from the Java code and avoid creating
-	// another byte array bellow
-	buffer = malloc(MAX_PACKET);
-	if (buffer == NULL) {
-		throwError(env, "java/lang/OutOfMemoryError", "Failed to allocate memory to receive ICMP datagram");
-		goto end_recv;
-	}
-	memset(buffer, 0, MAX_PACKET);
-
 	// Clear out the address structures where the
 	// operating system will store the to/from address
 	// information.
@@ -472,7 +494,7 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 	// Receive data from the socket:
 	// IPv4 packets will also include the IP header preceding the ICMP data
 	// IPv6 packets do NOT include the IP header
-	ret = (int)recvfrom(attr.fd, buffer, MAX_PACKET, 0, in_addr, &in_addr_len);
+	ret = (int)recvfrom(attr.fd, attr.buffer, MAX_PACKET, 0, in_addr, &in_addr_len);
 	if (ret == SOCKET_ERROR) {
 		// Error reading the information from the socket
 		int saved_errno = errno;
@@ -494,19 +516,19 @@ Java_org_opennms_protocols_icmp_ICMPSocket_receivePacket (JNIEnv *env, jobject i
 		// NOTE: The ip_hl field of the IP header is the number
 		// of 4 byte values in the header. Thus the ip_hl must
 		// be multiplied by 4 (or shifted 2 bits).
-		ip_hdr_v4 = (iphdr_t *) buffer;
+		ip_hdr_v4 = (iphdr_t *) attr.buffer;
 		ret -= ip_hdr_v4->ONMS_IP_HL << 2;
 		if (ret <= 0) {
 			throwError(env, "java/io/IOException", "Malformed ICMP datagram received");
 			goto end_recv;
 		}
-		icmp_hdr_v4 = (icmphdr_t *) ((char *) buffer + (ip_hdr_v4->ONMS_IP_HL << 2));
+		icmp_hdr_v4 = (icmphdr_t *) ((char *) attr.buffer + (ip_hdr_v4->ONMS_IP_HL << 2));
 
 		source_addr_bytes = (unsigned char*)&in_addr_v4.sin_addr.s_addr;
 		source_addr_size = 4;
 		icmp_pkt_bytes = icmp_hdr_v4;
 	} else {
-		icmp_hdr_v6 = (struct icmp6_hdr *)((char *)buffer);
+		icmp_hdr_v6 = (struct icmp6_hdr *)((char *)attr.buffer);
 		source_addr_bytes = in_addr_v6.sin6_addr.s6_addr;
 		source_addr_size = 16;
 		icmp_pkt_bytes = icmp_hdr_v6;
@@ -566,9 +588,6 @@ end_recv:
 	}
 	if (response_packet_class != NULL) {
 		(*env)->DeleteLocalRef(env, response_packet_class);
-	}
-	if (buffer != NULL) {
-		free(buffer);
 	}
 
 	return response_packet;
@@ -731,5 +750,10 @@ JNICALL Java_org_opennms_protocols_icmp_ICMPSocket_close
 #ifdef __WIN32__
 		WSACleanup();
 #endif
+	}
+
+	if (attr.buffer != 0) {
+		free(attr.buffer);
+		setReceiveBufferPtr(env, instance, 0);
 	}
 }

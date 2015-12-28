@@ -56,6 +56,8 @@ public abstract class ICMPSocket implements AutoCloseable {
      */
     private final FileDescriptor m_rawFd;
 
+    private long m_receiveBufferPtr = 0L;
+
     private final int m_pingerId;
 
     private final boolean m_useIPv6;
