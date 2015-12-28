@@ -28,8 +28,6 @@
 
 package org.opennms.protocols.icmp;
 
-import java.net.DatagramPacket;
-
 /**
  * Used to represent ICMPv4 and ICMPv6 Echo Requests and Echo Replies.
  *
@@ -39,12 +37,12 @@ public interface ICMPEchoPacket {
 
     public int getPacketSize();
 
-    public byte[] toBytes();
-
-    public long getThreadId();
-
     public short getIdentity();
 
     public short getSequenceId();
+
+    public long getThreadId();
+
+    public byte[] toBytes();
 
 }

@@ -32,6 +32,7 @@ package org.opennms.protocols.icmp6;
 import java.nio.ByteBuffer;
 
 import org.opennms.protocols.icmp.ICMPEchoPacket;
+import org.opennms.protocols.icmp.PacketUtils;
 
 /**
  * ICMPEchoReply
@@ -40,9 +41,6 @@ import org.opennms.protocols.icmp.ICMPEchoPacket;
  */
 public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
 
-    // This long is equivalent to 'OpenNMS!' in ascii
-    public static final long COOKIE = 0x4F70656E4E4D5321L;
-    
     // Offsets for TYPE, CODE and CHECK_SUM defined in ICMPv6Packet
     public static final int HEADER_OFFSET_IDENTIFIER = 4;
     public static final int HEADER_OFFSET_SEQUENCE_NUMBER = 6;
@@ -116,7 +114,7 @@ public class ICMPv6EchoPacket extends ICMPv6Packet implements ICMPEchoPacket {
     }
 
     public void setCookie() {
-        getDataBuffer().putLong(DATA_OFFSET_COOKIE, COOKIE);
+        getDataBuffer().putLong(DATA_OFFSET_COOKIE, PacketUtils.NAMED_PAD_ASCII);
     }
 
     @Override

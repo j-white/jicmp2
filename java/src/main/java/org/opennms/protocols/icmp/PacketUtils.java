@@ -40,6 +40,10 @@ public class PacketUtils {
      */
     public static final byte NAMED_PAD[] = { (byte) 'O', (byte) 'p', (byte) 'e', (byte) 'n', (byte) 'N', (byte) 'M', (byte) 'S', (byte) '!' };
 
+    /**
+     * This long is equivalent to 'OpenNMS!' in ascii
+     */
+    public static final long NAMED_PAD_ASCII = 0x4F70656E4E4D5321L;
 
     /**
      * Converts a byte to a short.

@@ -129,7 +129,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
 
     }
 
-
     /**
      * Creates a new discovery ping packet from the passed buffer.
      * 
@@ -184,37 +183,6 @@ public class ICMPv4EchoPacket extends ICMPv4Packet implements ICMPEchoPacket {
     @Override
     public int getPacketSize() {
     	return getDataSize() + m_pad.length;
-    }
-
-    /**
-     * Computes and stores the current checksum based upon the data currently
-     * contained in the object.
-     */
-    public final void computeChecksum() {
-        OC16ChecksumProducer summer = new OC16ChecksumProducer();
-
-        super.computeChecksum(summer);
-        summer.add(m_sent);
-        summer.add(m_tid);
-
-        //
-        // do all the elements combining two bytes
-        // into a single short.
-        //
-        int stop = m_pad.length - (m_pad.length % 2);
-        for (int i = 0; i < stop; i += 2)
-            summer.add(m_pad[i], m_pad[i + 1]);
-
-        //
-        // take care of any stray bytes
-        //
-        if ((m_pad.length % 2) == 1)
-            summer.add(m_pad[m_pad.length - 1]);
-
-        //
-        // set the checksum in the header
-        //
-        super.setChecksum(summer.getChecksum());
     }
 
     /**

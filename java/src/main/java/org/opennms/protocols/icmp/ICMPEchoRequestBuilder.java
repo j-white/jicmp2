@@ -43,9 +43,9 @@ import org.opennms.protocols.icmp6.ICMPv6EchoRequest;
  */
 public class ICMPEchoRequestBuilder {
 
-    public static final int MIN_PACKET_SIZE = 16;
-    public static final int MAX_PACKET_SIZE = 65536;
-    public static final int DEFAULT_PACKET_SIZE = 60;
+    public static final int MIN_PACKET_SIZE = 24;
+    public static final int MAX_PACKET_SIZE = 64512;
+    public static final int DEFAULT_PACKET_SIZE = 56;
 
     private final InetAddress m_destination;
     private long m_threadId = 0;

@@ -48,7 +48,7 @@ public class ICMPv6Packet {
     public ICMPv6Packet(byte[] bytes, int offset, int length) {
         this(ByteBuffer.wrap(bytes, offset, length));
     }
-    
+
     public ICMPv6Packet(ByteBuffer ipPayload) {
         m_packetData = ipPayload;
     }

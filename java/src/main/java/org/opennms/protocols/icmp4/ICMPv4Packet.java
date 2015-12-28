@@ -383,38 +383,6 @@ public class ICMPv4Packet {
     }
 
     /**
-     * Provides the default checksum implementation for the ICMP header. It MUST
-     * be overriden by any derived classes to ensure that the checksum includes
-     * the dervived class data. Once the checksum is calculated, a call to the
-     * method getChecksum() will return the calculated sum.
-     */
-    public void computeChecksum() {
-        OC16ChecksumProducer summer = new OC16ChecksumProducer();
-        computeChecksum(summer);
-        m_checksum = summer.getChecksum();
-    }
-
-    /**
-     * Used by derived classes to begin the checksum process. The process
-     * involves setting the checksum to zero and then performing the checksum
-     * over the various values.
-     * 
-     * @param summer
-     *            The checksum builder object.
-     */
-    protected void computeChecksum(OC16ChecksumProducer summer) {
-        summer.reset();
-        summer.add(m_type, m_code);
-
-        // adding zero has should no effect....
-        // m_checksum = 0;
-        summer.add((short) 0);
-
-        summer.add(m_sequence);
-        summer.add(m_ident);
-    }
-
-    /**
      * Writes the ICMP header out to the specified buffer at the starting
      * offset. If the buffer does not have sufficent data to store the
      * information then an IndexOutOfBoundsException is thrown.
